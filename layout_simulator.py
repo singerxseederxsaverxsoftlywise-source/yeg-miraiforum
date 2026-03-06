@@ -95,9 +95,12 @@ canvas{display:block;background:#fff}
         <span class="lbl">席数</span>
         <input type="range" id="ni" min="2" max="20" value="8" oninput="setN(this.value)" style="width:65px">
         <b id="nv" style="font-size:11px;min-width:26px">8席</b>
+        <span class="lbl" style="margin-left:6px">椅子間隔</span>
+        <input class="minput" id="cs-inp" type="number" min="0" max="200" value="10" oninput="setCS(this.value)" style="width:44px">
+        <span class="lbl">cm</span>
       </div>
       <div class="row" style="margin-bottom:0;gap:4px" id="cw-row">
-        <span class="lbl">橏子サイズ</span>
+        <span class="lbl">椅子サイズ</span>
         <input class="minput" id="cw-inp" type="number" min="30" max="100" value="55" oninput="setCW(this.value)" style="width:40px">
         <span class="lbl">cm</span>
       </div>
@@ -601,6 +604,7 @@ function selTool(t){
 }
 function setN(v){state.n=parseInt(v)||8;document.getElementById('nv').textContent=v+'席';drawAll();}
 function setCW(v){state.chairW=Math.max(30,Math.min(100,parseInt(v)||55));drawAll();}
+function setCS(v){state.chairSp=Math.max(0,Math.min(200,parseInt(v)||10));drawAll();}
 function setM(){
   state.mT=parseInt(document.getElementById('mT').value)||0;state.mB=parseInt(document.getElementById('mB').value)||0;
   state.mL=parseInt(document.getElementById('mL').value)||0;state.mR=parseInt(document.getElementById('mR').value)||0;drawAll();
