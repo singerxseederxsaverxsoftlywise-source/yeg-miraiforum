@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WBS管理 | 未来フォーラム 彦根</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header id="header">
+  <div class="header-top">
+    <div class="project-info">
+      <h1 id="proj-name">読込中...</h1>
+      <div class="sub" id="proj-sub"></div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label" id="prog-label">0 / 0 (0%)</div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="wbs">📋 WBS</button>
+    <button class="tab-btn" data-tab="gantt">📅 ガントチャート</button>
+    <button class="tab-btn" data-tab="assignee">👤 担当者別</button>
+  </nav>
+</header>
+
+<!-- ===== Main ===== -->
+<div id="main">
+
+  <!-- WBS View -->
+  <div id="wbs-view" class="active">
+    <div class="wbs-content" id="wbs-content">
+      <!-- JS で生成 -->
+    </div>
+    <!-- Detail Panel -->
+    <aside id="detail-panel">
+      <div style="display:flex;align-items:center;margin-bottom:16px">
+        <span class="detail-title" id="d-title" style="margin-bottom:0;flex:1">タスク詳細</span>
+        <button class="close-panel" id="close-panel" title="閉じる">×</button>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">担当者</div>
+        <input class="detail-input" type="text" id="d-tanto" placeholder="担当者名">
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">ステータス</div>
+        <select class="detail-input" id="d-status">
+          <option value="open">未完了</option>
+          <option value="done">完了</option>
+        </select>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">優先度</div>
+        <select class="detail-input" id="d-prio">
+          <option value="high">🔴 高</option>
+          <option value="mid">🟡 中</option>
+          <option value="low">🟢 低</option>
+        </select>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">メモ</div>
+        <textarea class="detail-input" id="d-memo" placeholder="メモ・備考"></textarea>
+      </div>
+      <button class="detail-save-btn" id="save-detail">💾 保存</button>
+    </aside>
+  </div>
+
+  <!-- Gantt View -->
+  <div id="gantt-view" class="view">
+    <!-- JS で生成 -->
+  </div>
+
+  <!-- Assignee View -->
+  <div id="assignee-view" class="view">
+    <!-- JS で生成 -->
+  </div>
+
+</div>
+
+<script src="tasks.js"></script>
+<script src="app.js"></script>
+<script>
+  // プロジェクト情報を header に反映
+  document.addEventListener('DOMContentLoaded', () => {
+    const p = TASKS.project;
+    document.getElementById('proj-name').textContent = p.name;
+    document.getElementById('proj-sub').textContent = p.date + '  |  ' + p.venue;
+    document.title = 'WBS | ' + p.name;
+  });
+</script>
+</body>
+</html>
