@@ -217,6 +217,7 @@ function mkBlock(type,x,y,w,h){
   return{id:state.nextId++,type:type,x:snap(x),y:snap(y),
     w:w||d.w,h:h||d.h,n:state.n,dir:state.frontDir,
     seats:d.seats,st:d.st,color:state.currentColor,
+    chairW:state.chairW,chairSp:state.chairSp,
     mT:state.mT,mB:state.mB,mL:state.mL,mR:state.mR,locked:false};
 }
 function cloneBlocks(a){return a.map(function(b){return Object.assign({},b);});}
@@ -328,7 +329,9 @@ function drawBlock(b,prev,dx,dy){
       ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText('C',x+w/2,y+h/2);break;
     case 'theater_row':{
-      var n=b.n||state.n,cw=state.chairW,cs=state.chairSp;
+      var n=b.n||state.n;
+      var cw=b.chairW!=null?b.chairW:state.chairW;
+      var cs=b.chairSp!=null?b.chairSp:state.chairSp;
       if(isH(bdir)){for(var i=0;i<n;i++){ctx.fillStyle=col;ctx.fillRect(px(bx+i*(cw+cs)),y,px(cw)-1,h);}}
       else{for(var i=0;i<n;i++){ctx.fillStyle=col;ctx.fillRect(x,px(by+i*(cw+cs)),w,px(cw)-1);}}
       break;}
