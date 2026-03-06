@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+._*
+.DS_Store
+*.xlsx
+tasks/
+wbs.md
+plan.md
+merge.sh
+*.pdf
