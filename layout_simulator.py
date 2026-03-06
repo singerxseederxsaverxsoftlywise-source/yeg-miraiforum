@@ -96,6 +96,11 @@ canvas{display:block;background:#fff}
         <input type="range" id="ni" min="2" max="20" value="8" oninput="setN(this.value)" style="width:65px">
         <b id="nv" style="font-size:11px;min-width:26px">8席</b>
       </div>
+      <div class="row" style="margin-bottom:0;gap:4px" id="cw-row">
+        <span class="lbl">橏子サイズ</span>
+        <input class="minput" id="cw-inp" type="number" min="30" max="100" value="55" oninput="setCW(this.value)" style="width:40px">
+        <span class="lbl">cm</span>
+      </div>
       <div class="row" style="margin-bottom:0;gap:3px">
         <span class="lbl">色</span>
         <input type="color" id="cpicker" value="#339af0" oninput="setColor(this.value)" style="width:26px;height:20px;border:1px solid #ddd;border-radius:4px;cursor:pointer;padding:1px">
@@ -197,7 +202,7 @@ function dims(type,n,dir){
   var cw=state.chairW,cs=state.chairSp,h=isH(dir);
   switch(type){
     case 'chair':       return{w:55,h:55,seats:1,st:'c'};
-    case 'theater_row': return h?{w:n*cw+(n-1)*cs,h:55,seats:n,st:'c'}:{w:55,h:n*cw+(n-1)*cs,seats:n,st:'c'};
+    case 'theater_row': return h?{w:n*cw+(n-1)*cs,h:cw,seats:n,st:'c'}:{w:cw,h:n*cw+(n-1)*cs,seats:n,st:'c'};
     case 'desk_2':      return h?{w:180,h:100,seats:2,st:'d'}:{w:100,h:180,seats:2,st:'d'};
     case 'desk_3':      return h?{w:180,h:100,seats:3,st:'d'}:{w:100,h:180,seats:3,st:'d'};
     default:            return{w:100,h:100,seats:0,st:null};
@@ -463,14 +468,6 @@ function initCanvas(){
       }
     }
   });
-  // ホイールズーム（スクロールで拡大縮小）
-  cv.addEventListener('wheel',function(e){
-    e.preventDefault();
-    var delta=e.deltaY>0?1/1.15:1.15;
-    // ズーム前のマウス位置（論理座標）
-    var p=getXY(e);
-    setZoom(Z*delta,e);
-  },{passive:false});
   selTool('theater_row');updateUndoBtn();setCopyDir('top');drawAll();
 }
 
@@ -596,12 +593,14 @@ function selTool(t){
   var el=document.getElementById('t-'+t);if(el)el.classList.add('active');
   document.getElementById('tlabel').textContent=NAMES[t]||t;
   document.getElementById('n-row').style.display=(t==='theater_row')?'flex':'none';
+  document.getElementById('cw-row').style.display=(t==='theater_row'||t==='chair')?'flex':'none';
   if(t!=='select'&&DEF_COLOR[t]){state.currentColor=DEF_COLOR[t];document.getElementById('cpicker').value=DEF_COLOR[t];}
   if(t!=='select'){state.selected=[];}
   if(cv)cv.style.cursor=(t==='select')?'default':'crosshair';
   drawAll();
 }
 function setN(v){state.n=parseInt(v)||8;document.getElementById('nv').textContent=v+'席';drawAll();}
+function setCW(v){state.chairW=Math.max(30,Math.min(100,parseInt(v)||55));drawAll();}
 function setM(){
   state.mT=parseInt(document.getElementById('mT').value)||0;state.mB=parseInt(document.getElementById('mB').value)||0;
   state.mL=parseInt(document.getElementById('mL').value)||0;state.mR=parseInt(document.getElementById('mR').value)||0;drawAll();
