@@ -21,11 +21,19 @@
         <h1 id="proj-name">読込中...</h1>
         <div class="sub" id="proj-sub"></div>
       </div>
-      <div class="filter-controls" style="display:flex;gap:12px;font-size:11px;color:var(--text2);align-items:center;">
-        <span style="font-weight:600">表示切替:</span>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l1" checked> 第一階層 (会場)</label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l2" checked> 第二階層 (TT)</label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l3" checked> 第三階層 (タスク)</label>
+      <div class="header-actions" style="display:flex;align-items:center;gap:20px;">
+        <div class="filter-controls" style="display:flex;gap:12px;font-size:11px;color:var(--text2);align-items:center;">
+          <span style="font-weight:600">表示切替:</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l1" checked> 第一階層</label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l2" checked> 第二階層</label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="filter-l3" checked> 第三階層</label>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-label" id="prog-label">0 / 0 (0%)</div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="prog-fill" style="width:0%"></div>
+          </div>
+        </div>
       </div>
     </div>
     <nav class="tab-nav">

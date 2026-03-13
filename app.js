@@ -328,16 +328,21 @@ function createWithSidebar(v) {
     if (f.l1) {
         const side = document.createElement('div'); side.className = 'venue-sidebar';
         side.style.backgroundColor = getColor(v.id, '#f1f5f9');
+        
+        // 編集・削除ボタンをサイドバー上部へ
+        const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
+        edit.title = '会場名を編集';
+        edit.onclick = e => { e.stopPropagation(); editVenue(v); };
+        const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
+        del.title = '会場を削除';
+        del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
+        
+        side.appendChild(edit);
+        side.appendChild(del);
+
         const span = document.createElement('span'); span.textContent = getEdit(v.id).name || v.name;
         side.appendChild(span);
         side.onclick = () => openDetail(v, 'venue');
-        
-        // 編集・削除ボタンをサイドバーに
-        const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
-        edit.onclick = e => { e.stopPropagation(); editVenue(v); };
-        const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
-        del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
-        side.appendChild(edit); side.appendChild(del);
         
         row.appendChild(side);
     }
@@ -554,8 +559,7 @@ function renderPersonnelList() {
         groups.forEach(g => {
             if (!f.l2 && !f.l3) return;
             if (f.l2) {
-                const h = document.createElement('div'); h.className = 'section-block-header';
-                h.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+                const h = document.createElement('div'); h.className = 'section-block-header list-tt-header';
                 h.innerHTML = `<span class="section-block-name">⏱ ${getEdit(g.id).timing || g.timing}</span>`;
                 content.appendChild(h);
             }
@@ -584,8 +588,7 @@ function renderPrepList() {
         groups.forEach(g => {
             if (!f.l2 && !f.l3) return;
             if (f.l2) {
-                const h = document.createElement('div'); h.className = 'section-block-header';
-                h.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+                const h = document.createElement('div'); h.className = 'section-block-header list-tt-header';
                 h.innerHTML = `<span class="section-block-name">⏱ ${getEdit(g.id).timing || g.timing}</span>`;
                 content.appendChild(h);
             }

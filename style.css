@@ -797,7 +797,7 @@ textarea.detail-input {
   border-left: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-/* Gri/* ===== New Layout: Vertical Bar & Excel Style ===== */
+/* ===== New Layout: Vertical Bar & Excel Style ===== */
 .with-sidebar {
   display: flex;
   border-bottom: 1px solid var(--border);
@@ -808,20 +808,27 @@ textarea.detail-input {
   background: var(--bg3);
   border-right: 1.5px solid var(--border2);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 15px;
   flex-shrink: 0;
   cursor: pointer;
+  padding: 10px 0;
 }
 
 .venue-sidebar:hover {
   background: var(--bg4);
 }
 
+.venue-sidebar.selected {
+  background: #ebf4ff;
+  border-right-color: var(--accent);
+}
+
 .venue-sidebar span {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  transform: rotate(180deg);
   font-weight: 700;
   font-size: 13px;
   color: var(--text);
@@ -836,6 +843,7 @@ textarea.detail-input {
 .gantt-excel-wrap {
   display: flex;
   flex-direction: column;
+  overflow-x: auto;
 }
 
 .gantt-hdr-row {
@@ -860,13 +868,8 @@ textarea.detail-input {
   font-size: 11px;
 }
 
-.gantt-days-row {
-  display: flex;
-  overflow: visible;
-}
-
 .gantt-day-hdr {
-  width: 30px;
+  width: 31px;
   height: 24px;
   border-right: 1px solid var(--border);
   display: flex;
@@ -906,7 +909,7 @@ textarea.detail-input {
 }
 
 .gantt-cell {
-  width: 30px;
+  width: 31px;
   height: 30px;
   border-right: 1px solid rgba(0,0,0,0.05);
   flex-shrink: 0;
@@ -915,30 +918,23 @@ textarea.detail-input {
 .gantt-cell.sat { background: rgba(59,130,246,0.02); }
 .gantt-cell.sun { background: rgba(239,68,68,0.02); }
 
-.gantt-bar-container {
+.gantt-bar {
   position: absolute;
   top: 6px;
   bottom: 6px;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-}
-
-.gantt-bar {
-  position: absolute;
-  height: 100%;
   border-radius: 4px;
   background: var(--accent);
   opacity: 0.8;
-  pointer-events: auto;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   transition: transform 0.1s;
+  z-index: 2;
 }
 
 .gantt-bar:hover {
   transform: scaleY(1.1);
   opacity: 1;
+  z-index: 3;
 }
 
 .gantt-bar.done {
@@ -946,12 +942,20 @@ textarea.detail-input {
   opacity: 0.5;
 }
 
-/* Edit UI */
+/* TT (Second hierarchy) style in lists */
+.list-tt-header {
+  background: #f1f5f9 !important;
+  border-left: none !important;
+  font-weight: 700 !important;
+  color: var(--text) !important;
+}
+
 .edit-trigger {
-  margin-left: 6px;
+  opacity: 0.4;
   cursor: pointer;
-  opacity: 0.3;
-  font-size: 10px;
+  font-size: 12px;
+  transition: opacity 0.2s;
+  padding: 4px;
 }
 .edit-trigger:hover { opacity: 1; }
 
