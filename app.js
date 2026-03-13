@@ -8,40 +8,72 @@
 
 // ===== ストレージキー =====
 const LS_DONE = 'wbs_done_', LS_EDIT = 'wbs_edit_';
-const LS_CP = 'wbs_custom_personnel';
-const LS_CR = 'wbs_custom_prep';
-const LS_CG = 'wbs_custom_groups';
-const LS_CV = 'wbs_custom_venues';   // ③ 新規会場
+const LS_CP = 'wbs_custom_personnel', LS_CR = 'wbs_custom_prep';
+const LS_CG = 'wbs_custom_groups', LS_CV = 'wbs_custom_venues';
+const LS_CLR = 'wbs_colors_';
 
-// ===== 基本CRUD =====
-function getDone(id) { const v = localStorage.getItem(LS_DONE + id); return v !== null ? v === 'true' : false; }
+// ===== 基本CRUD & ユーティリティ =====
+function getDone(id) { return localStorage.getItem(LS_DONE + id) === 'true'; }
 function setDone(id, val) { localStorage.setItem(LS_DONE + id, val); }
 function getEdit(id) { try { return JSON.parse(localStorage.getItem(LS_EDIT + id)) || {}; } catch { return {}; } }
 function saveEdit(id, d) { localStorage.setItem(LS_EDIT + id, JSON.stringify(d)); }
+function getColor(id, def = '#3b82f6') { return localStorage.getItem(LS_CLR + id) || def; }
+function saveColor(id, c) { localStorage.setItem(LS_CLR + id, c); }
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 function mergeTask(t) { return { ...t, ...getEdit(t.id), done: getDone(t.id) }; }
+
+// 会場・グループ取得
+function getCV() { try { return JSON.parse(localStorage.getItem(LS_CV)) || []; } catch { return []; } }
+function saveCV(a) { localStorage.setItem(LS_CV, JSON.stringify(a)); }
+function getCG() { try { return JSON.parse(localStorage.getItem(LS_CG)) || []; } catch { return []; } }
+function saveCG(a) { localStorage.setItem(LS_CG, JSON.stringify(a)); }
 function getCP() { try { return JSON.parse(localStorage.getItem(LS_CP)) || []; } catch { return []; } }
 function saveCP(a) { localStorage.setItem(LS_CP, JSON.stringify(a)); }
 function getCR() { try { return JSON.parse(localStorage.getItem(LS_CR)) || []; } catch { return []; } }
 function saveCR(a) { localStorage.setItem(LS_CR, JSON.stringify(a)); }
-function getCG() { try { return JSON.parse(localStorage.getItem(LS_CG)) || []; } catch { return []; } }
-function saveCG(a) { localStorage.setItem(LS_CG, JSON.stringify(a)); }
-function getCV() { try { return JSON.parse(localStorage.getItem(LS_CV)) || []; } catch { return []; } }
-function saveCV(a) { localStorage.setItem(LS_CV, JSON.stringify(a)); }
 
-// ===== 開閉状態 =====
-function getOpen(key, def = true) { const v = localStorage.getItem('wbs_open_' + key); return v === null ? def : v === 'true'; }
-function setOpen(key, val) { localStorage.setItem('wbs_open_' + key, val); }
-function applyOpenState(body, arrow, key, def = true) {
-    const o = getOpen(key, def);
-    body.style.display = o ? '' : 'none';
-    if (arrow) arrow.classList.toggle('open', o);
+function getAllVenues() { return [...TASKS.venues, ...getCV()]; }
+function getGroupsForVenue(v) { return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)]; }
+
+// 階層フィルタ状態
+function getFilter() {
+    return {
+        l1: document.getElementById('filter-l1')?.checked ?? true,
+        l2: document.getElementById('filter-l2')?.checked ?? true,
+        l3: document.getElementById('filter-l3')?.checked ?? true
+    };
 }
-function toggleOpen(body, arrow, key) {
-    const was = body.style.display !== 'none';
-    body.style.display = was ? 'none' : '';
-    if (arrow) arrow.classList.toggle('open', !was);
-    setOpen(key, !was);
+
+// 編集・削除プロンプト
+function editVenue(v) {
+    const n = prompt('会場名を変更:', v.name);
+    if (n === null) return;
+    if (TASKS.venues.some(x => x.id === v.id)) {
+        saveEdit(v.id, { name: n });
+    } else {
+        const arr = getCV(); const idx = arr.findIndex(x => x.id === v.id);
+        if (idx >= 0) { arr[idx].name = n; saveCV(arr); }
+    }
+    renderAll();
+}
+function deleteVenue(v) {
+    if (!confirm(`会場「${v.name}」を削除しますか？`)) return;
+    saveCV(getCV().filter(x => x.id !== v.id)); renderAll();
+}
+function editGroup(g) {
+    const n = prompt('タイムテーブル名を変更:', g.timing);
+    if (n === null) return;
+    if (getCG().some(x => x.id === g.id)) {
+        const arr = getCG(); const idx = arr.findIndex(x => x.id === g.id);
+        arr[idx].timing = n; saveCG(arr);
+    } else {
+        saveEdit(g.id, { timing: n });
+    }
+    renderAll();
+}
+function deleteGroup(g) {
+    if (!confirm(`タイムテーブル「${g.timing}」を削除しますか？`)) return;
+    saveCG(getCG().filter(x => x.id !== g.id)); renderAll();
 }
 
 // ===== 並べ替え順序 =====
@@ -116,34 +148,41 @@ function tantoBadge(t) { const s = document.createElement('span'); s.className =
 
 // ===== 詳細パネル =====
 let selectedTaskId = null;
-function openDetail(task) {
+function openDetail(task, type = 'task') {
     selectedTaskId = task.id;
     document.getElementById('detail-panel').classList.add('open');
-    document.getElementById('d-title').textContent = task.text;
+    document.getElementById('d-title').textContent = task.text || task.name || task.timing;
     document.getElementById('d-tanto').value = task.tanto || '';
     document.getElementById('d-start').value = task.start || '';
     document.getElementById('d-end').value = task.end || '';
     document.getElementById('d-status').value = task.done ? 'done' : 'open';
     document.getElementById('d-prio').value = task.priority || 'mid';
     document.getElementById('d-memo').value = task.memo || '';
-    document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
-    document.querySelectorAll(`.task-row[data-id="${task.id}"]`).forEach(r => r.classList.add('selected'));
-}
-function closeDetail() {
-    document.getElementById('detail-panel').classList.remove('open');
-    document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
-    selectedTaskId = null;
+    document.getElementById('d-color').value = getColor(task.id);
+    
+    // 会場/グループなら日付フィールドなどを隠す
+    const isTask = (type === 'task');
+    ['d-tanto','d-start','d-end','d-status','d-prio','d-memo'].forEach(id => {
+        document.getElementById(id).parentElement.style.display = isTask ? '' : 'none';
+    });
+    
+    document.querySelectorAll('.task-row, .venue-sidebar, .timing-header').forEach(r => r.classList.remove('selected'));
 }
 function saveDetail() {
     if (!selectedTaskId) return;
-    setDone(selectedTaskId, document.getElementById('d-status').value === 'done');
-    saveEdit(selectedTaskId, {
-        tanto: document.getElementById('d-tanto').value,
-        start: document.getElementById('d-start').value,
-        end: document.getElementById('d-end').value,
-        priority: document.getElementById('d-prio').value,
-        memo: document.getElementById('d-memo').value,
-    });
+    const clr = document.getElementById('d-color').value;
+    saveColor(selectedTaskId, clr);
+    
+    if (document.getElementById('d-status').parentElement.style.display !== 'none') {
+        saveEdit(selectedTaskId, {
+            tanto: document.getElementById('d-tanto').value,
+            start: document.getElementById('d-start').value,
+            end: document.getElementById('d-end').value,
+            priority: document.getElementById('d-prio').value,
+            memo: document.getElementById('d-memo').value,
+        });
+        setDone(selectedTaskId, document.getElementById('d-status').value === 'done');
+    }
     renderAll();
 }
 function deleteSelected() {
@@ -282,88 +321,78 @@ function setupDrag(el, id, type, scope, items, orderKey, handle) {
 }
 
 // ===== WBS レンダリング =====
-function renderWBS() {
-    const wrap = document.getElementById('wbs-content');
-    wrap.innerHTML = '';
+// 縦バーサイドバー付きのコンテナを作成
+function createWithSidebar(v) {
+    const f = getFilter();
+    const row = document.createElement('div'); row.className = 'with-sidebar';
+    if (f.l1) {
+        const side = document.createElement('div'); side.className = 'venue-sidebar';
+        side.style.backgroundColor = getColor(v.id, '#f1f5f9');
+        const span = document.createElement('span'); span.textContent = getEdit(v.id).name || v.name;
+        side.appendChild(span);
+        side.onclick = () => openDetail(v, 'venue');
+        
+        // 編集・削除ボタンをサイドバーに
+        const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
+        edit.onclick = e => { e.stopPropagation(); editVenue(v); };
+        const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
+        del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
+        side.appendChild(edit); side.appendChild(del);
+        
+        row.appendChild(side);
+    }
+    const content = document.createElement('div'); content.className = 'content-area';
+    row.appendChild(content);
+    return { row, content };
+}
 
-    // ③ ＋会場ボタン（一番上）
-    const addVenueRow = document.createElement('div');
-    addVenueRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:10px;';
+function renderWBS() {
+    const wrap = document.getElementById('wbs-content'); wrap.innerHTML = '';
+    const f = getFilter();
+
     const addVenueBtn = document.createElement('button');
-    addVenueBtn.className = 'add-btn'; addVenueBtn.innerHTML = '🏢 ＋ 会場を追加';
+    addVenueBtn.className = 'add-btn'; addVenueBtn.innerHTML = '🏢 ＋ 会場追加';
     addVenueBtn.onclick = () => showAddVenueForm(wrap);
-    addVenueRow.appendChild(addVenueBtn);
-    wrap.appendChild(addVenueRow);
+    wrap.appendChild(addVenueBtn);
 
     getAllVenues().forEach(v => {
-        const allGroups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
-        let vTotal = 0, vDone = 0;
-        allGroups.forEach(g => {
-            const aP = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
-            const aR = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
-            vTotal += aP.length + aR.length; vDone += [...aP, ...aR].filter(x => x.done).length;
-        });
-
-        const vBlock = document.createElement('div'); vBlock.className = 'venue-block';
-
-        // --- 会場ヘッダー（createElement のみ、innerHTML +=なし）---
-        const vHeader = document.createElement('div'); vHeader.className = 'venue-header';
-        const vArrow = document.createElement('span'); vArrow.className = 'arrow'; vArrow.textContent = '▶';
-        const vH2 = document.createElement('h2'); vH2.textContent = '🏢 ' + v.name;
-        const vCnt = document.createElement('span'); vCnt.className = 'venue-count'; vCnt.textContent = `${vDone}/${vTotal} 完了`;
-        const addGrpBtn = document.createElement('button'); addGrpBtn.className = 'add-btn'; addGrpBtn.innerHTML = '＋ タイムテーブル'; addGrpBtn.style.marginLeft = '10px';
-        addGrpBtn.onclick = e => { e.stopPropagation(); showAddGroupForm(vBlock, v.id); };
-        vHeader.appendChild(vArrow); vHeader.appendChild(vH2); vHeader.appendChild(vCnt); vHeader.appendChild(addGrpBtn);
-
-        const vBody = document.createElement('div'); vBody.className = 'venue-body';
-        applyOpenState(vBody, vArrow, 'v_' + v.id, true);
-        vHeader.addEventListener('click', e => {
-            if (addGrpBtn === e.target || addGrpBtn.contains(e.target)) return;
-            toggleOpen(vBody, vArrow, 'v_' + v.id);
-        });
-
-        // --- タイムテーブル ---
-        allGroups.forEach((g, gIdx) => {
-            const allP = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
-            const allR = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
-            const gDone = [...allP, ...allR].filter(x => x.done).length;
-
-            const tBlock = document.createElement('div'); tBlock.className = 'timing-block'; tBlock.dataset.gid = g.id;
-
-            // ② タイミングヘッダー：arrow / h3 / count / [右端] handle + ↑↓
+        const { row, content } = createWithSidebar(v);
+        const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
+        
+        groups.forEach((g, gIdx) => {
+            if (!f.l2 && !f.l3) return;
             const tHeader = document.createElement('div'); tHeader.className = 'timing-header';
-            const tArrow = document.createElement('span'); tArrow.className = 'arrow'; tArrow.textContent = '▶';
-            const tH3 = document.createElement('h3'); tH3.textContent = '⏱ ' + g.timing;
-            const tCnt = document.createElement('span'); tCnt.className = 'timing-count'; tCnt.textContent = `${gDone}/${allP.length + allR.length}`;
+            tHeader.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+            if (f.l2) {
+                const tName = document.createElement('h3'); tName.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
+                tHeader.appendChild(tName);
+                
+                const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
+                edit.onclick = e => { e.stopPropagation(); editGroup(g); };
+                const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
+                del.onclick = e => { e.stopPropagation(); deleteGroup(g); };
+                tHeader.appendChild(edit); tHeader.appendChild(del);
+                
+                tHeader.onclick = () => openDetail(g, 'group');
+            } else {
+                tHeader.style.padding = '2px';
+            }
+            content.appendChild(tHeader);
 
-            // ① 右端の ↑↓ + drag-handle
-            const { handle: gHandle, mb: gMb } = makeMoveWidget(allGroups, g.id, 'grp_' + v.id, gIdx, true);
-
-            tHeader.appendChild(tArrow); tHeader.appendChild(tH3); tHeader.appendChild(tCnt);
-            tHeader.appendChild(gHandle); tHeader.appendChild(gMb);
-
-            const tBody = document.createElement('div');
-            applyOpenState(tBody, tArrow, 'g_' + g.id, true);
-            tHeader.addEventListener('click', e => {
-                if ([gHandle, gMb].some(b => b === e.target || b.contains(e.target))) return;
-                toggleOpen(tBody, tArrow, 'g_' + g.id);
-            });
-
-            // ② サブセクション（人員・準備物のみ。ヘッダーに＋ボタン不要）
-            const pSec = buildSubSection('👥 人員', allP, g.id, 'personnel');
-            const rSec = buildSubSection('📦 準備物', allR, g.id, 'prep');
-            tBody.appendChild(pSec); tBody.appendChild(rSec);
-            tBlock.appendChild(tHeader); tBlock.appendChild(tBody);
-            vBody.appendChild(tBlock);
-
-            setupDrag(tBlock, g.id, 'group', v.id, allGroups, 'grp_' + v.id, gHandle);
+            if (f.l3) {
+                const pItems = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
+                const rItems = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
+                
+                [...pItems, ...rItems].forEach(item => {
+                    const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
+                    tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
+                    tRow.onclick = () => openDetail(item, 'task');
+                    content.appendChild(tRow);
+                });
+            }
         });
-
-        vBlock.appendChild(vHeader); vBlock.appendChild(vBody);
-        wrap.appendChild(vBlock);
+        wrap.appendChild(row);
     });
-
-    updateProgress();
 }
 
 function buildSubSection(title, items, groupId, type) {
@@ -426,66 +455,75 @@ function buildSubSection(title, items, groupId, type) {
 }
 
 // ===== ガントチャート =====
-const GANTT_START = new Date('2026-03-01'), GANTT_END = new Date('2026-07-01');
-const MONTHS = ['3月', '4月', '5月', '6月'], TOTAL_MS = GANTT_END - GANTT_START;
-function dayRatio(d) { const dt = typeof d === 'string' ? new Date(d) : d; return Math.max(0, Math.min(1, (dt - GANTT_START) / TOTAL_MS)); }
-
-function makeGanttRow(task) {
-    const t = mergeTask(task);
-    const row = document.createElement('div'); row.className = `gantt-row${t.done ? ' done' : ''}`;
-    const label = document.createElement('div'); label.className = 'gantt-label'; label.textContent = t.text; label.title = t.text;
-    row.appendChild(label);
-    const grid = document.createElement('div'); grid.className = 'gantt-grid'; grid.style.position = 'relative';
-    MONTHS.forEach(() => { const c = document.createElement('div'); c.className = 'gantt-month-col'; grid.appendChild(c); });
-    const sp = dayRatio(t.start) * 100, ep = (dayRatio(t.end) + 1 / (TOTAL_MS / 86400000)) * 100;
-    if (t.start === t.end) {
-        const m = document.createElement('div'); m.className = 'gantt-marker'; m.style.left = sp + '%'; m.textContent = '◆';
-        if (t.done) m.style.color = '#cbd5e1'; grid.appendChild(m);
-    } else {
-        const b = document.createElement('div'); b.className = `gantt-bar ${t.done ? 'done' : (t.priority || '')}`;
-        b.style.left = sp + '%'; b.style.width = Math.max(0.5, ep - sp) + '%'; b.title = `${t.text}：${t.start} 〜 ${t.end}`; grid.appendChild(b);
-    }
-    row.appendChild(grid); return row;
-}
-
+// Excelスタイルガントチャート
 function renderGantt() {
     const wrap = document.getElementById('gantt-view'); wrap.innerHTML = '';
-    const hRow = document.createElement('div'); hRow.className = 'gantt-header-row';
-    MONTHS.forEach(m => { const el = document.createElement('div'); el.className = 'gantt-month'; el.textContent = m; hRow.appendChild(el); });
-    wrap.appendChild(hRow);
-    const gw = document.createElement('div'); gw.className = 'gantt-wrap'; gw.style.position = 'relative';
+    const f = getFilter();
+    const rangeStart = new Date('2026-03-01'), rangeEnd = new Date('2026-06-30');
+    const days = []; for(let d=new Date(rangeStart); d<=rangeEnd; d.setDate(d.getDate()+1)) days.push(new Date(d));
+    
+    const container = document.createElement('div'); container.className = 'gantt-excel-wrap';
+    
+    // ヘッダー (日付)
+    const hdr = document.createElement('div'); hdr.className = 'gantt-hdr-row';
+    const lblCol = document.createElement('div'); lblCol.className = 'gantt-label-col'; lblCol.textContent = 'タスク名';
+    hdr.appendChild(lblCol);
+    days.forEach(d => {
+        const dEl = document.createElement('div'); dEl.className = 'gantt-day-hdr' + (d.getDay()===0?' sun':d.getDay()===6?' sat':'');
+        dEl.textContent = `${d.getMonth()+1}/${d.getDate()}`;
+        hdr.appendChild(dEl);
+    });
+    container.appendChild(hdr);
 
     getAllVenues().forEach(v => {
-        applyOrder(getGroupsForVenue(v), 'grp_' + v.id).forEach(g => {
-            const tasks = applyOrder([...g.personnel, ...getCP().filter(t => t.groupId === g.id)], 'prs_' + g.id);
-            if (!tasks.length) return;
-            const lbl = document.createElement('div'); lbl.className = 'gantt-section-label'; lbl.textContent = `🏢 ${v.name}  ＞  ${g.timing}`; gw.appendChild(lbl);
-            tasks.forEach(t => gw.appendChild(makeGanttRow(t)));
-        });
-    });
+        const { row, content } = createWithSidebar(v);
+        const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
+        
+        groups.forEach(g => {
+            if (!f.l2 && !f.l3) return;
+            const gRow = document.createElement('div'); gRow.className = 'gantt-row';
+            const gLbl = document.createElement('div'); gLbl.className = 'gantt-task-name'; 
+            gLbl.style.backgroundColor = '#f1f5f9'; gLbl.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
+            gRow.appendChild(gLbl);
+            
+            const gCells = document.createElement('div'); gCells.className = 'gantt-cells';
+            days.forEach(() => { const c = document.createElement('div'); c.className = 'gantt-cell'; gCells.appendChild(c); });
+            gRow.appendChild(gCells);
+            if (f.l2) content.appendChild(gRow);
 
-    // 週グレー縦線
-    let d = new Date(GANTT_START);
-    while (d <= GANTT_END) {
-        const r = dayRatio(d);
-        const line = document.createElement('div'); line.style.cssText = `position:absolute;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.07);pointer-events:none;z-index:4;left:calc(200px + (100% - 200px) * ${r})`;
-        const lbl = document.createElement('div'); lbl.style.cssText = `position:absolute;top:2px;font-size:9px;color:#94a3b8;font-family:var(--font-mono);transform:translateX(-50%);background:#fff;padding:0 2px;white-space:nowrap;z-index:5;left:calc(200px + (100% - 200px) * ${r})`;
-        lbl.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
-        gw.appendChild(line); gw.appendChild(lbl);
-        d = new Date(d.getTime() + 7 * 86400000);
-    }
-    [new Date('2026-04-01'), new Date('2026-05-01'), new Date('2026-06-01')].forEach(md => {
-        const r = dayRatio(md); const line = document.createElement('div');
-        line.style.cssText = `position:absolute;top:0;bottom:0;width:1.5px;background:rgba(59,130,246,0.18);pointer-events:none;z-index:3;left:calc(200px + (100% - 200px) * ${r})`;
-        gw.appendChild(line);
+            if (f.l3) {
+                const tasks = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
+                tasks.forEach(t => {
+                    const tRow = document.createElement('div'); tRow.className = 'gantt-row';
+                    const tLbl = document.createElement('div'); tLbl.className = 'gantt-task-name'; tLbl.textContent = t.text;
+                    tRow.appendChild(tLbl);
+                    
+                    const cells = document.createElement('div'); cells.className = 'gantt-cells';
+                    days.forEach(d => {
+                        const c = document.createElement('div'); c.className = 'gantt-cell' + (d.getDay()===0?' sun':d.getDay()===6?' sat':'');
+                        cells.appendChild(c);
+                    });
+                    
+                    // バー描画
+                    if (t.start && t.end) {
+                        const sIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.start);
+                        const eIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.end);
+                        if (sIdx >= 0) {
+                            const bar = document.createElement('div'); bar.className = 'gantt-bar' + (t.done?' done':'');
+                            bar.style.left = (sIdx * 31) + 'px';
+                            bar.style.width = ((eIdx >= 0 ? eIdx - sIdx + 1 : 1) * 31 - 6) + 'px';
+                            bar.style.backgroundColor = getColor(g.id, getColor(v.id));
+                            cells.appendChild(bar);
+                        }
+                    }
+                    tRow.appendChild(cells);
+                    content.appendChild(tRow);
+                });
+            }
+        });
+        wrap.appendChild(row);
     });
-    const todayR = dayRatio(new Date());
-    if (todayR >= 0 && todayR <= 1) {
-        const line = document.createElement('div'); line.className = 'today-line'; line.style.left = `calc(200px + (100% - 200px) * ${todayR})`;
-        const lbl = document.createElement('div'); lbl.className = 'today-label'; lbl.style.left = `calc(200px + (100% - 200px) * ${todayR})`; lbl.textContent = '今日';
-        gw.appendChild(line); gw.appendChild(lbl);
-    }
-    wrap.appendChild(gw);
+    wrap.appendChild(container); // スクロール領域として
 }
 
 // ===== 担当者別 =====
@@ -506,56 +544,63 @@ function renderDeadline() {
 }
 
 // ===== 人員一覧 =====
+// ===== 人員一覧 =====
 function renderPersonnelList() {
     const wrap = document.getElementById('personnel-view'); wrap.innerHTML = '';
-    getAllVenues().forEach(v => applyOrder(getGroupsForVenue(v), 'grp_' + v.id).forEach(g => {
-        const items = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
-        if (!items.length) return;
-        renderSectionBlock(wrap, `🏢 ${v.name} ＞ ${g.timing}`, items, true);
-    }));
+    const f = getFilter();
+    getAllVenues().forEach(v => {
+        const { row, content } = createWithSidebar(v);
+        const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
+        groups.forEach(g => {
+            if (!f.l2 && !f.l3) return;
+            if (f.l2) {
+                const h = document.createElement('div'); h.className = 'section-block-header';
+                h.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+                h.innerHTML = `<span class="section-block-name">⏱ ${getEdit(g.id).timing || g.timing}</span>`;
+                content.appendChild(h);
+            }
+            if (f.l3) {
+                const items = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
+                items.forEach(t => {
+                    const r = document.createElement('div'); r.className = `list-row task-row${t.done ? ' done' : ''}`;
+                    r.innerHTML = `<div class="task-check${t.done ? ' checked' : ''}"></div><span class="task-text">${t.text}</span>`;
+                    r.appendChild(tantoBadge(t.tanto)); r.appendChild(prioBadge(t.priority));
+                    r.onclick = () => openDetail(t, 'task');
+                    content.appendChild(r);
+                });
+            }
+        });
+        wrap.appendChild(row);
+    });
 }
 
 // ===== 準備物一覧 =====
 function renderPrepList() {
     const wrap = document.getElementById('prep-view'); wrap.innerHTML = '';
-    getAllVenues().forEach(v => applyOrder(getGroupsForVenue(v), 'grp_' + v.id).forEach(g => {
-        const items = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
-        if (!items.length) return;
-        const sec = document.createElement('div'); sec.className = 'section-block';
-        const h = document.createElement('div'); h.className = 'section-block-header';
-        h.innerHTML = `<span class="section-block-name">🏢 ${v.name} ＞ ${g.timing}</span><span class="section-block-count">${items.filter(i => i.done).length}/${items.length} 完了</span>`;
-        sec.appendChild(h);
-        items.forEach(p => {
-            const row = document.createElement('div'); row.className = `list-row${p.done ? ' done' : ''}`;
-            row.innerHTML = `<div class="task-check${p.done ? ' checked' : ''}" data-check="${p.id}"></div><span class="task-text">${p.text}</span>`;
-            row.querySelector('[data-check]').addEventListener('click', () => { setDone(p.id, !getDone(p.id)); renderAll(); });
-            row.addEventListener('click', () => { setDone(p.id, !getDone(p.id)); renderAll(); });
-            sec.appendChild(row);
+    const f = getFilter();
+    getAllVenues().forEach(v => {
+        const { row, content } = createWithSidebar(v);
+        const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
+        groups.forEach(g => {
+            if (!f.l2 && !f.l3) return;
+            if (f.l2) {
+                const h = document.createElement('div'); h.className = 'section-block-header';
+                h.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+                h.innerHTML = `<span class="section-block-name">⏱ ${getEdit(g.id).timing || g.timing}</span>`;
+                content.appendChild(h);
+            }
+            if (f.l3) {
+                const items = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
+                items.forEach(p => {
+                    const r = document.createElement('div'); r.className = `list-row${p.done ? ' done' : ''}`;
+                    r.innerHTML = `<div class="task-check${p.done ? ' checked' : ''}"></div><span class="task-text">${p.text}</span>`;
+                    r.onclick = () => { setDone(p.id, !getDone(p.id)); renderAll(); };
+                    content.appendChild(r);
+                });
+            }
         });
-        wrap.appendChild(sec);
-    }));
-}
-
-function renderSectionBlock(wrap, title, tasks, isPersonnel) {
-    const sec = document.createElement('div'); sec.className = 'section-block';
-    const h = document.createElement('div'); h.className = 'section-block-header';
-    h.innerHTML = `<span class="section-block-name">${title}</span><span class="section-block-count">${tasks.filter(t => t.done).length}/${tasks.length} 完了</span>`;
-    sec.appendChild(h);
-    tasks.forEach(t => {
-        const row = document.createElement('div'); row.className = `list-row task-row${t.done ? ' done' : ''}`;
-        row.dataset.id = t.id;
-        row.innerHTML = `<div class="task-check${t.done ? ' checked' : ''}" data-check="${t.id}"></div>
-      <span class="task-text">${t.text}</span>
-      <span style="font-size:10px;color:var(--text3);margin-left:auto;font-family:var(--font-mono)">${t.end || ''}</span>`;
-        if (isPersonnel) {
-            row.insertBefore(tantoBadge(t.tanto), row.querySelector('span[style]'));
-            row.insertBefore(prioBadge(t.priority), row.querySelector('span[style]'));
-        }
-        row.querySelector('[data-check]').addEventListener('click', e => { e.stopPropagation(); setDone(t.id, !getDone(t.id)); renderAll(); });
-        if (isPersonnel) row.addEventListener('click', () => openDetail(t));
-        sec.appendChild(row);
+        wrap.appendChild(row);
     });
-    wrap.appendChild(sec);
 }
 
 function renderAll() {
@@ -570,5 +615,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-panel').addEventListener('click', closeDetail);
     document.getElementById('save-detail').addEventListener('click', saveDetail);
     document.getElementById('del-task').addEventListener('click', deleteSelected);
-    renderWBS(); updateProgress();
+    
+    // フィルタ連動
+    ['filter-l1','filter-l2','filter-l3'].forEach(id => {
+        document.getElementById(id).addEventListener('change', renderAll);
+    });
+    
+    renderAll();
 });
