@@ -147,7 +147,6 @@ function prioBadge(p) { const s = document.createElement('span'); s.className = 
 function tantoBadge(t) { const s = document.createElement('span'); s.className = 'badge ' + (t ? 'badge-tanto' : 'badge-unset'); s.textContent = t || '未定'; return s; }
 
 // ===== 詳細パネル =====
-let selectedTaskId = null;
 function openDetail(task, type = 'task') {
     selectedTaskId = task.id;
     document.getElementById('detail-panel').classList.add('open');
@@ -160,19 +159,19 @@ function openDetail(task, type = 'task') {
     document.getElementById('d-memo').value = task.memo || '';
     document.getElementById('d-color').value = getColor(task.id);
     
-    // 会場/グループなら日付フィールドなどを隠す
     const isTask = (type === 'task');
     ['d-tanto','d-start','d-end','d-status','d-prio','d-memo'].forEach(id => {
         document.getElementById(id).parentElement.style.display = isTask ? '' : 'none';
     });
-    
-    document.querySelectorAll('.task-row, .venue-sidebar, .timing-header').forEach(r => r.classList.remove('selected'));
+}
+function closeDetail() {
+    document.getElementById('detail-panel').classList.remove('open');
+    selectedTaskId = null;
 }
 function saveDetail() {
     if (!selectedTaskId) return;
     const clr = document.getElementById('d-color').value;
     saveColor(selectedTaskId, clr);
-    
     if (document.getElementById('d-status').parentElement.style.display !== 'none') {
         saveEdit(selectedTaskId, {
             tanto: document.getElementById('d-tanto').value,
@@ -192,6 +191,36 @@ function deleteSelected() {
     localStorage.removeItem(LS_DONE + selectedTaskId);
     localStorage.removeItem(LS_EDIT + selectedTaskId);
     closeDetail(); renderAll();
+}
+
+// ===== セクション表示補助 =====
+function toggleOpen(body, arrow, key) {
+    const isClose = body.classList.toggle('collapsed');
+    arrow.textContent = isClose ? '▶' : '▼';
+    localStorage.setItem('wbs_open_' + key, isClose ? '0' : '1');
+}
+function applyOpenState(body, arrow, key, def = true) {
+    const s = localStorage.getItem('wbs_open_' + key);
+    const isClose = s === '0' || (!s && !def);
+    body.classList.toggle('collapsed', isClose);
+    arrow.textContent = isClose ? '▶' : '▼';
+}
+
+function renderSectionBlock(wrap, title, tasks, isPersonnel) {
+    const sec = document.createElement('div'); sec.className = 'section-block';
+    const h = document.createElement('div'); h.className = 'section-block-header';
+    h.innerHTML = `<span class="section-block-name">${title}</span><span class="section-block-count">${tasks.filter(t => t.done).length}/${tasks.length} 完了</span>`;
+    sec.appendChild(h);
+    tasks.forEach(t => {
+        const row = document.createElement('div'); row.className = `list-row task-row${t.done ? ' done' : ''}`;
+        row.innerHTML = `<div class="task-check${t.done ? ' checked' : ''}"></div><span class="task-text">${t.text}</span>`;
+        if (isPersonnel) {
+            row.appendChild(tantoBadge(t.tanto)); row.appendChild(prioBadge(t.priority));
+        }
+        row.onclick = () => openDetail(t, 'task');
+        sec.appendChild(row);
+    });
+    wrap.appendChild(sec);
 }
 
 // ===== インライン追加フォーム =====
@@ -250,7 +279,6 @@ function showAddGroupForm(container, venueId) {
     container.appendChild(form); form.querySelector('input').focus();
 }
 
-// ③ 会場追加フォーム
 function showAddVenueForm(container) {
     const ex = container.querySelector('.venue-add-form'); if (ex) { ex.remove(); return; }
     const form = document.createElement('div'); form.className = 'add-form venue-add-form'; form.style.cssText = 'padding:10px 16px;margin-bottom:8px;border-radius:8px;border:1px dashed #cbd5e1;';
@@ -265,27 +293,20 @@ function showAddVenueForm(container) {
     container.prepend(form);
 }
 
-// ===== ドラッグ =====
-let _dragSrc = null, _dragType = null, _dragScope = null;
-
-function makeMoveWidget(items, id, orderKey, idx, isGroup) {
-    // ドラッグハンドル
+// ===== ドラッグ & 並べ替え =====
+function makeMoveWidget(items, id, orderKey, idx) {
     const handle = document.createElement('span');
     handle.className = 'drag-handle'; handle.textContent = '⠿'; handle.title = 'ドラッグで並べ替え';
-
-    // ↑↓ ボタン
     const mb = document.createElement('div'); mb.className = 'move-btns';
-    const ub = document.createElement('button'); ub.className = 'move-btn'; ub.textContent = '▲'; ub.title = '上へ';
-    const db = document.createElement('button'); db.className = 'move-btn'; db.textContent = '▼'; db.title = '下へ';
+    const ub = document.createElement('button'); ub.className = 'move-btn'; ub.textContent = '▲';
+    const db = document.createElement('button'); db.className = 'move-btn'; db.textContent = '▼';
     if (idx === 0) ub.disabled = true;
     if (idx === items.length - 1) db.disabled = true;
     ub.onclick = e => { e.stopPropagation(); moveItem(items, id, 'up', orderKey); };
     db.onclick = e => { e.stopPropagation(); moveItem(items, id, 'down', orderKey); };
     mb.appendChild(ub); mb.appendChild(db);
-
     return { handle, mb };
 }
-
 function setupDrag(el, id, type, scope, items, orderKey, handle) {
     handle.setAttribute('draggable', true);
     handle.addEventListener('dragstart', e => {
@@ -320,30 +341,23 @@ function setupDrag(el, id, type, scope, items, orderKey, handle) {
     });
 }
 
-// ===== WBS レンダリング =====
-// 縦バーサイドバー付きのコンテナを作成
-function createWithSidebar(v) {
+// ===== 会場サイドバー生成 =====
+function createWithSidebar(v, allowEdit = false) {
     const f = getFilter();
     const row = document.createElement('div'); row.className = 'with-sidebar';
     if (f.l1) {
         const side = document.createElement('div'); side.className = 'venue-sidebar';
         side.style.backgroundColor = getColor(v.id, '#f1f5f9');
-        
-        // 編集・削除ボタンをサイドバー上部へ
-        const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
-        edit.title = '会場名を編集';
-        edit.onclick = e => { e.stopPropagation(); editVenue(v); };
-        const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
-        del.title = '会場を削除';
-        del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
-        
-        side.appendChild(edit);
-        side.appendChild(del);
-
+        if (allowEdit) {
+            const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
+            edit.onclick = e => { e.stopPropagation(); editVenue(v); };
+            const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
+            del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
+            side.appendChild(edit); side.appendChild(del);
+        }
         const span = document.createElement('span'); span.textContent = getEdit(v.id).name || v.name;
         side.appendChild(span);
         side.onclick = () => openDetail(v, 'venue');
-        
         row.appendChild(side);
     }
     const content = document.createElement('div'); content.className = 'content-area';
@@ -351,6 +365,7 @@ function createWithSidebar(v) {
     return { row, content };
 }
 
+// ===== WBS レンダリング =====
 function renderWBS() {
     const wrap = document.getElementById('wbs-content'); wrap.innerHTML = '';
     const f = getFilter();
@@ -361,33 +376,27 @@ function renderWBS() {
     wrap.appendChild(addVenueBtn);
 
     getAllVenues().forEach(v => {
-        const { row, content } = createWithSidebar(v);
+        const { row, content } = createWithSidebar(v, true);
         const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
-        
-        groups.forEach((g, gIdx) => {
+        groups.forEach(g => {
             if (!f.l2 && !f.l3) return;
             const tHeader = document.createElement('div'); tHeader.className = 'timing-header';
             tHeader.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
             if (f.l2) {
                 const tName = document.createElement('h3'); tName.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
                 tHeader.appendChild(tName);
-                
                 const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
                 edit.onclick = e => { e.stopPropagation(); editGroup(g); };
                 const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
                 del.onclick = e => { e.stopPropagation(); deleteGroup(g); };
                 tHeader.appendChild(edit); tHeader.appendChild(del);
-                
                 tHeader.onclick = () => openDetail(g, 'group');
-            } else {
-                tHeader.style.padding = '2px';
             }
             content.appendChild(tHeader);
 
             if (f.l3) {
                 const pItems = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
                 const rItems = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
-                
                 [...pItems, ...rItems].forEach(item => {
                     const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
@@ -400,77 +409,27 @@ function renderWBS() {
     });
 }
 
-function buildSubSection(title, items, groupId, type) {
-    const sec = document.createElement('div'); sec.className = 'sub-section';
-    const orderKey = (type === 'personnel' ? 'prs_' : 'prp_') + groupId;
-    const stateKey = (type === 'personnel' ? 'sp_' : 'sr_') + groupId;
-
-    const header = document.createElement('div'); header.className = 'sub-header';
-    const hArrow = document.createElement('span'); hArrow.className = 'arrow'; hArrow.textContent = '▶';
-    const hTitle = document.createElement('span'); hTitle.className = 'sub-title'; hTitle.textContent = title;
-    const hCnt = document.createElement('span'); hCnt.className = 'sub-count'; hCnt.textContent = `${items.filter(i => i.done).length}/${items.length}`;
-    header.appendChild(hArrow); header.appendChild(hTitle); header.appendChild(hCnt);
-
-    const body = document.createElement('div'); body.className = 'sub-body';
-    applyOpenState(body, hArrow, stateKey, true);
-    header.onclick = () => toggleOpen(body, hArrow, stateKey);
-
-    const list = document.createElement('div'); list.className = 'task-list';
-
-    items.forEach((item, idx) => {
-        const row = document.createElement('div');
-        row.className = `task-row${item.done ? ' done' : ''}`;
-        row.dataset.id = item.id;
-
-        const chk = document.createElement('div');
-        chk.className = `task-check${item.done ? ' checked' : ''}`;
-        chk.dataset.check = item.id;
-        const txtEl = document.createElement('span'); txtEl.className = 'task-text'; txtEl.textContent = item.text;
-
-        // ① 右端に ↑↓ + drag-handle
-        const { handle, mb } = makeMoveWidget(items, item.id, orderKey, idx, false);
-
-        if (type === 'personnel') {
-            chk.addEventListener('click', e => { e.stopPropagation(); setDone(item.id, !getDone(item.id)); renderAll(); });
-            row.addEventListener('click', () => openDetail(item));
-            row.appendChild(chk); row.appendChild(txtEl);
-            row.appendChild(tantoBadge(item.tanto));
-            row.appendChild(prioBadge(item.priority));
-            if (item.memo) { const m = document.createElement('span'); m.className = 'task-memo'; m.title = item.memo; m.textContent = item.memo; row.appendChild(m); }
-        } else {
-            chk.addEventListener('click', () => { setDone(item.id, !getDone(item.id)); renderAll(); });
-            row.addEventListener('click', () => { setDone(item.id, !getDone(item.id)); renderAll(); });
-            row.appendChild(chk); row.appendChild(txtEl);
-        }
-        // 右端に配置
-        row.appendChild(handle); row.appendChild(mb);
-
-        setupDrag(row, item.id, type, groupId, items, orderKey, handle);
-        list.appendChild(row);
-    });
-
-    const addRow = document.createElement('div'); addRow.className = 'add-row';
-    const addBtn = document.createElement('button'); addBtn.className = 'add-btn'; addBtn.innerHTML = '＋ 追加';
-    addBtn.onclick = e => { e.stopPropagation(); showAddForm(body, groupId, type); };
-    addRow.appendChild(addBtn);
-
-    body.appendChild(list); body.appendChild(addRow);
-    sec.appendChild(header); sec.appendChild(body);
-    return sec;
-}
-
-// ===== ガントチャート =====
-// Excelスタイルガントチャート
 function renderGantt() {
     const wrap = document.getElementById('gantt-view'); wrap.innerHTML = '';
     const f = getFilter();
     const rangeStart = new Date('2026-03-01'), rangeEnd = new Date('2026-06-30');
     const days = []; for(let d=new Date(rangeStart); d<=rangeEnd; d.setDate(d.getDate()+1)) days.push(new Date(d));
     
+    // メインコンテナ
     const container = document.createElement('div'); container.className = 'gantt-excel-wrap';
     
     // ヘッダー (日付)
     const hdr = document.createElement('div'); hdr.className = 'gantt-hdr-row';
+    
+    // 会場サイドバー分（40px相当）のスペーサー
+    if (f.l1) {
+        const sideSpacer = document.createElement('div');
+        sideSpacer.style.width = '40px'; sideSpacer.style.flexShrink = '0'; sideSpacer.style.background = 'var(--bg2)';
+        sideSpacer.style.borderRight = '1px solid var(--border2)';
+        sideSpacer.style.position = 'sticky'; sideSpacer.style.left = '0'; sideSpacer.style.zIndex = '110';
+        hdr.appendChild(sideSpacer);
+    }
+
     const lblCol = document.createElement('div'); lblCol.className = 'gantt-label-col'; lblCol.textContent = 'タスク名';
     hdr.appendChild(lblCol);
     days.forEach(d => {
@@ -481,7 +440,7 @@ function renderGantt() {
     container.appendChild(hdr);
 
     getAllVenues().forEach(v => {
-        const { row, content } = createWithSidebar(v);
+        const { row, content } = createWithSidebar(v, false);
         const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
         
         groups.forEach(g => {
@@ -509,7 +468,6 @@ function renderGantt() {
                         cells.appendChild(c);
                     });
                     
-                    // バー描画
                     if (t.start && t.end) {
                         const sIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.start);
                         const eIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.end);
@@ -526,35 +484,17 @@ function renderGantt() {
                 });
             }
         });
-        wrap.appendChild(row);
+        container.appendChild(row);
     });
-    wrap.appendChild(container); // スクロール領域として
+    wrap.appendChild(container);
 }
 
-// ===== 担当者別 =====
-function renderAssignee() {
-    const wrap = document.getElementById('assignee-view'); wrap.innerHTML = '';
-    const map = new Map();
-    allPersonnel().forEach(t => { const k = t.tanto || '未定'; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
-    [...map.keys()].sort((a, b) => a === '未定' ? 1 : b === '未定' ? -1 : a.localeCompare(b))
-        .forEach(n => renderSectionBlock(wrap, '👤 ' + n, map.get(n).sort((a, b) => (a.end || '').localeCompare(b.end || '')), true));
-}
-
-// ===== 締切日順 =====
-function renderDeadline() {
-    const wrap = document.getElementById('deadline-view'); wrap.innerHTML = '';
-    const map = new Map();
-    allPersonnel().forEach(t => { const k = t.end || '未設定'; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
-    [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([d, ts]) => renderSectionBlock(wrap, '📅 ' + d, ts, true));
-}
-
-// ===== 人員一覧 =====
 // ===== 人員一覧 =====
 function renderPersonnelList() {
     const wrap = document.getElementById('personnel-view'); wrap.innerHTML = '';
     const f = getFilter();
     getAllVenues().forEach(v => {
-        const { row, content } = createWithSidebar(v);
+        const { row, content } = createWithSidebar(v, false);
         const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
         groups.forEach(g => {
             if (!f.l2 && !f.l3) return;
@@ -583,7 +523,7 @@ function renderPrepList() {
     const wrap = document.getElementById('prep-view'); wrap.innerHTML = '';
     const f = getFilter();
     getAllVenues().forEach(v => {
-        const { row, content } = createWithSidebar(v);
+        const { row, content } = createWithSidebar(v, false);
         const groups = applyOrder(getGroupsForVenue(v), 'grp_' + v.id);
         groups.forEach(g => {
             if (!f.l2 && !f.l3) return;
@@ -606,6 +546,21 @@ function renderPrepList() {
     });
 }
 
+// ===== 担当者別 / 締切日順 =====
+function renderAssignee() {
+    const wrap = document.getElementById('assignee-view'); wrap.innerHTML = '';
+    const map = new Map();
+    allPersonnel().forEach(t => { const k = t.tanto || '未定'; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
+    [...map.keys()].sort((a, b) => a === '未定' ? 1 : b === '未定' ? -1 : a.localeCompare(b))
+        .forEach(n => renderSectionBlock(wrap, '👤 ' + n, map.get(n).sort((a, b) => (a.end || '').localeCompare(b.end || '')), true));
+}
+function renderDeadline() {
+    const wrap = document.getElementById('deadline-view'); wrap.innerHTML = '';
+    const map = new Map();
+    allPersonnel().forEach(t => { const k = t.end || '未設定'; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
+    [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([d, ts]) => renderSectionBlock(wrap, '📅 ' + d, ts, true));
+}
+
 function renderAll() {
     const R = { wbs: renderWBS, gantt: renderGantt, assignee: renderAssignee, deadline: renderDeadline, personnel: renderPersonnelList, prep: renderPrepList };
     if (R[activeTab]) R[activeTab]();
@@ -618,11 +573,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('close-panel').addEventListener('click', closeDetail);
     document.getElementById('save-detail').addEventListener('click', saveDetail);
     document.getElementById('del-task').addEventListener('click', deleteSelected);
-    
-    // フィルタ連動
     ['filter-l1','filter-l2','filter-l3'].forEach(id => {
         document.getElementById(id).addEventListener('change', renderAll);
     });
-    
     renderAll();
 });

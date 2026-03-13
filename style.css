@@ -806,7 +806,7 @@ textarea.detail-input {
 .venue-sidebar {
   width: 40px;
   background: var(--bg3);
-  border-right: 1.5px solid var(--border2);
+  border-right: 1px solid var(--border2);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -815,6 +815,10 @@ textarea.detail-input {
   flex-shrink: 0;
   cursor: pointer;
   padding: 10px 0;
+  position: sticky;
+  left: 0;
+  z-index: 50;
+  box-sizing: border-box;
 }
 
 .venue-sidebar:hover {
@@ -839,11 +843,14 @@ textarea.detail-input {
   flex: 1;
 }
 
-/* Excel Style Gantt */
 .gantt-excel-wrap {
   display: flex;
   flex-direction: column;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(100vh - 120px);
+  position: relative;
+  background: white;
+  box-sizing: border-box;
 }
 
 .gantt-hdr-row {
@@ -853,7 +860,8 @@ textarea.detail-input {
   border-bottom: 1px solid var(--border2);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 100;
+  box-sizing: border-box;
 }
 
 .gantt-label-col {
@@ -866,6 +874,10 @@ textarea.detail-input {
   align-items: center;
   font-weight: 600;
   font-size: 11px;
+  position: sticky;
+  left: 40px; /* venue-sidebar width */
+  z-index: 60;
+  box-sizing: border-box;
 }
 
 .gantt-day-hdr {
@@ -879,6 +891,7 @@ textarea.detail-input {
   font-family: var(--font-mono);
   background: var(--bg2);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .gantt-day-hdr.sat { color: #3b82f6; }
@@ -887,6 +900,7 @@ textarea.detail-input {
 .gantt-row {
   display: flex;
   border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
 }
 
 .gantt-task-name {
@@ -901,11 +915,16 @@ textarea.detail-input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: sticky;
+  left: 40px; /* venue-sidebar width */
+  z-index: 50;
+  box-sizing: border-box;
 }
 
 .gantt-cells {
   display: flex;
   position: relative;
+  box-sizing: border-box;
 }
 
 .gantt-cell {
@@ -913,6 +932,7 @@ textarea.detail-input {
   height: 30px;
   border-right: 1px solid rgba(0,0,0,0.05);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .gantt-cell.sat { background: rgba(59,130,246,0.02); }
