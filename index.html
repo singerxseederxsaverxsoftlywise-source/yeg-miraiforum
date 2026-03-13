@@ -57,8 +57,9 @@
           <button class="close-panel" id="close-panel">×</button>
         </div>
         <div class="detail-field">
-          <div class="detail-label">タスク名</div>
-          <div id="d-title2" style="font-size:13px;font-weight:600;color:var(--text)"></div>
+          <div class="detail-label">名称</div>
+          <input class="detail-input" type="text" id="d-name-input" placeholder="名称を入力">
+          <div id="d-title2" style="font-size:11px;color:var(--text2);margin-top:4px"></div>
         </div>
         <div class="detail-field">
           <div class="detail-label">担当者</div>
@@ -98,7 +99,7 @@
           <textarea class="detail-input" id="d-memo" placeholder="メモ・備考"></textarea>
         </div>
         <button class="detail-save-btn" id="save-detail">💾 保存</button>
-        <button class="detail-del-btn" id="del-task">🗑 削除（追加タスクのみ）</button>
+        <button class="detail-del-btn" id="del-task">🗑 削除（追加分のみ）</button>
       </aside>
     </div>
 

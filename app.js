@@ -147,10 +147,19 @@ function prioBadge(p) { const s = document.createElement('span'); s.className = 
 function tantoBadge(t) { const s = document.createElement('span'); s.className = 'badge ' + (t ? 'badge-tanto' : 'badge-unset'); s.textContent = t || '未定'; return s; }
 
 // ===== 詳細パネル =====
+let selectedTaskId = null;
+let selectedType = 'task'; // 'venue', 'group', 'task'
+
 function openDetail(task, type = 'task') {
     selectedTaskId = task.id;
+    selectedType = type;
     document.getElementById('detail-panel').classList.add('open');
-    document.getElementById('d-title').textContent = task.text || task.name || task.timing;
+    
+    // 名称入力
+    const name = task.text || task.name || task.timing;
+    document.getElementById('d-name-input').value = name;
+    document.getElementById('d-title2').textContent = `ID: ${task.id}`;
+
     document.getElementById('d-tanto').value = task.tanto || '';
     document.getElementById('d-start').value = task.start || '';
     document.getElementById('d-end').value = task.end || '';
@@ -170,10 +179,13 @@ function closeDetail() {
 }
 function saveDetail() {
     if (!selectedTaskId) return;
+    const newName = document.getElementById('d-name-input').value.trim();
     const clr = document.getElementById('d-color').value;
     saveColor(selectedTaskId, clr);
-    if (document.getElementById('d-status').parentElement.style.display !== 'none') {
+
+    if (selectedType === 'task') {
         saveEdit(selectedTaskId, {
+            text: newName,
             tanto: document.getElementById('d-tanto').value,
             start: document.getElementById('d-start').value,
             end: document.getElementById('d-end').value,
@@ -181,29 +193,42 @@ function saveDetail() {
             memo: document.getElementById('d-memo').value,
         });
         setDone(selectedTaskId, document.getElementById('d-status').value === 'done');
+    } else if (selectedType === 'venue') {
+        saveEdit(selectedTaskId, { name: newName });
+    } else if (selectedType === 'group') {
+        saveEdit(selectedTaskId, { timing: newName });
     }
+    closeDetail();
     renderAll();
 }
 function deleteSelected() {
     if (!selectedTaskId) return;
-    saveCP(getCP().filter(t => t.id !== selectedTaskId));
-    saveCR(getCR().filter(t => t.id !== selectedTaskId));
+    if (!confirm('本当に削除しますか？')) return;
+    
+    if (selectedType === 'task') {
+        saveCP(getCP().filter(t => t.id !== selectedTaskId));
+        saveCR(getCR().filter(t => t.id !== selectedTaskId));
+    } else if (selectedType === 'venue') {
+        saveCV(getCV().filter(v => v.id !== selectedTaskId));
+    } else if (selectedType === 'group') {
+        saveCG(getCG().filter(g => g.id !== selectedTaskId));
+    }
     localStorage.removeItem(LS_DONE + selectedTaskId);
     localStorage.removeItem(LS_EDIT + selectedTaskId);
     closeDetail(); renderAll();
 }
 
 // ===== セクション表示補助 =====
-function toggleOpen(body, arrow, key) {
+function toggleOpen(body, header, key) {
     const isClose = body.classList.toggle('collapsed');
-    arrow.textContent = isClose ? '▶' : '▼';
+    header.classList.toggle('collapsed', isClose);
     localStorage.setItem('wbs_open_' + key, isClose ? '0' : '1');
 }
-function applyOpenState(body, arrow, key, def = true) {
+function applyOpenState(body, header, key, def = true) {
     const s = localStorage.getItem('wbs_open_' + key);
     const isClose = s === '0' || (!s && !def);
     body.classList.toggle('collapsed', isClose);
-    arrow.textContent = isClose ? '▶' : '▼';
+    header.classList.toggle('collapsed', isClose);
 }
 
 function renderSectionBlock(wrap, title, tasks, isPersonnel) {
@@ -348,13 +373,7 @@ function createWithSidebar(v, allowEdit = false) {
     if (f.l1) {
         const side = document.createElement('div'); side.className = 'venue-sidebar';
         side.style.backgroundColor = getColor(v.id, '#f1f5f9');
-        if (allowEdit) {
-            const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
-            edit.onclick = e => { e.stopPropagation(); editVenue(v); };
-            const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
-            del.onclick = e => { e.stopPropagation(); deleteVenue(v); };
-            side.appendChild(edit); side.appendChild(del);
-        }
+        // ※ 編集ボタンは削除し、クリック＝詳細パネルでの編集とする
         const span = document.createElement('span'); span.textContent = getEdit(v.id).name || v.name;
         side.appendChild(span);
         side.onclick = () => openDetail(v, 'venue');
@@ -382,15 +401,23 @@ function renderWBS() {
             if (!f.l2 && !f.l3) return;
             const tHeader = document.createElement('div'); tHeader.className = 'timing-header';
             tHeader.style.borderLeft = `4px solid ${getColor(g.id, '#3b82f6')}`;
+            const tContent = document.createElement('div'); tContent.className = 'timing-content';
+            
             if (f.l2) {
+                const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '▼';
+                tHeader.appendChild(arrow);
                 const tName = document.createElement('h3'); tName.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
                 tHeader.appendChild(tName);
-                const edit = document.createElement('span'); edit.className = 'edit-trigger'; edit.textContent = '✎';
-                edit.onclick = e => { e.stopPropagation(); editGroup(g); };
-                const del = document.createElement('span'); del.className = 'edit-trigger'; del.textContent = '🗑';
-                del.onclick = e => { e.stopPropagation(); deleteGroup(g); };
-                tHeader.appendChild(edit); tHeader.appendChild(del);
-                tHeader.onclick = () => openDetail(g, 'group');
+                
+                // 開閉トグルのみ
+                tHeader.onclick = (e) => {
+                    if (e.target.tagName === 'H3') {
+                        openDetail(g, 'group');
+                    } else {
+                        toggleOpen(tContent, tHeader, g.id);
+                    }
+                };
+                applyOpenState(tContent, tHeader, g.id, true);
             }
             content.appendChild(tHeader);
 
@@ -401,9 +428,10 @@ function renderWBS() {
                     const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     tRow.onclick = () => openDetail(item, 'task');
-                    content.appendChild(tRow);
+                    tContent.appendChild(tRow);
                 });
             }
+            content.appendChild(tContent);
         });
         wrap.appendChild(row);
     });
@@ -448,6 +476,7 @@ function renderGantt() {
             const gRow = document.createElement('div'); gRow.className = 'gantt-row';
             const gLbl = document.createElement('div'); gLbl.className = 'gantt-task-name'; 
             gLbl.style.backgroundColor = '#f1f5f9'; gLbl.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
+            gLbl.onclick = () => openDetail(g, 'group');
             gRow.appendChild(gLbl);
             
             const gCells = document.createElement('div'); gCells.className = 'gantt-cells';

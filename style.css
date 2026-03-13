@@ -985,3 +985,46 @@ textarea.detail-input {
   .venue-sidebar span { font-size: 11px; }
   .gantt-task-name, .gantt-label-col { width: 140px; }
 }
+
+/* ===== Collapsible Sections ===== */
+.timing-content {
+  overflow: hidden;
+  max-height: 5000px;
+  transition: max-height 0.3s ease-out;
+}
+.timing-content.collapsed {
+  max-height: 0;
+}
+
+.timing-header {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.timing-header:hover {
+  background: var(--bg3);
+}
+
+.timing-header .arrow {
+  font-size: 10px;
+  width: 12px;
+  transition: transform 0.2s;
+  color: var(--text2);
+}
+
+.timing-header.collapsed .arrow {
+  transform: rotate(-90deg);
+}
+
+.timing-header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
