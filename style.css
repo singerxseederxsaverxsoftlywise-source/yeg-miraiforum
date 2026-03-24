@@ -1028,3 +1028,60 @@ textarea.detail-input {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* ===== Drag & Move Widgets ===== */
+.drag-handle {
+    cursor: grab;
+    padding: 4px 8px;
+    color: var(--text3);
+    font-size: 16px;
+    user-select: none;
+    opacity: 0.3;
+    transition: opacity 0.2s;
+    line-height: 1;
+}
+.drag-handle:hover { opacity: 1; }
+.drag-handle:active { cursor: grabbing; }
+
+.move-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 0 4px;
+    flex-shrink: 0;
+}
+.move-btn {
+    width: 22px;
+    height: 15px;
+    padding: 0;
+    font-size: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    border-radius: 3px;
+    color: var(--text2);
+    line-height: 12px;
+}
+.move-btn:hover:not(:disabled) {
+    background: var(--bg3);
+    color: var(--accent);
+}
+.move-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.dragging { opacity: 0.4; }
+.drag-over-top { border-top: 2px solid var(--accent) !important; }
+.drag-over-bottom { border-bottom: 2px solid var(--accent) !important; }
+
+/* Sidebar reorder adjustments */
+.venue-sidebar .move-btns {
+    margin-top: auto;
+    margin-bottom: 10px;
+}
+.venue-sidebar .drag-handle {
+    padding: 0;
+    font-size: 20px;
+    margin-top: 10px;
+}

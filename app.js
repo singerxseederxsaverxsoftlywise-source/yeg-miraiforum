@@ -11,6 +11,7 @@ const LS_DONE = 'wbs_done_', LS_EDIT = 'wbs_edit_';
 const LS_CP = 'wbs_custom_personnel', LS_CR = 'wbs_custom_prep';
 const LS_CG = 'wbs_custom_groups', LS_CV = 'wbs_custom_venues';
 const LS_CLR = 'wbs_colors_';
+const LS_DEL = 'wbs_deleted_ids';
 
 // ===== 基本CRUD & ユーティリティ =====
 function getDone(id) { return localStorage.getItem(LS_DONE + id) === 'true'; }
@@ -32,8 +33,17 @@ function saveCP(a) { localStorage.setItem(LS_CP, JSON.stringify(a)); }
 function getCR() { try { return JSON.parse(localStorage.getItem(LS_CR)) || []; } catch { return []; } }
 function saveCR(a) { localStorage.setItem(LS_CR, JSON.stringify(a)); }
 
-function getAllVenues() { return [...TASKS.venues, ...getCV()]; }
-function getGroupsForVenue(v) { return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)]; }
+// 削除済みリスト
+function getDeleted() { try { return JSON.parse(localStorage.getItem(LS_DEL)) || []; } catch { return []; } }
+function setDeleted(id) { const a = getDeleted(); if(!a.includes(id)){ a.push(id); localStorage.setItem(LS_DEL, JSON.stringify(a)); } }
+function isDeleted(id) { return getDeleted().includes(id); }
+
+function getAllVenues() { 
+    return [...TASKS.venues, ...getCV()].filter(v => !isDeleted(v.id)); 
+}
+function getGroupsForVenue(v) { 
+    return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)].filter(g => !isDeleted(g.id)); 
+}
 
 // 階層フィルタ状態
 function getFilter() {
@@ -94,8 +104,6 @@ function moveItem(items, id, dir, key) {
 }
 
 // ===== 全会場（base + カスタム）=====
-function getAllVenues() { return [...TASKS.venues, ...getCV()]; }
-function getGroupsForVenue(v) { return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)]; }
 
 // ===== 全人員 =====
 function allPersonnel() {
@@ -103,7 +111,7 @@ function allPersonnel() {
     getAllVenues().forEach(v => getGroupsForVenue(v).forEach(g => {
         const base = g.personnel.map(t => mergeTask({ ...t, venueId: v.id, venueN: v.name, groupId: g.id, groupN: g.timing }));
         const cust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask({ ...t, venueId: v.id, venueN: v.name, groupN: g.timing }));
-        arr.push(...applyOrder([...base, ...cust], 'prs_' + g.id));
+        arr.push(...applyOrder([...base, ...cust], 'prs_' + g.id).filter(t => !isDeleted(t.id)));
     }));
     return arr;
 }
@@ -114,7 +122,7 @@ function allPrepItems() {
     getAllVenues().forEach(v => getGroupsForVenue(v).forEach(g => {
         const base = (g.prepItems || []).map(p => ({ ...p, done: getDone(p.id), venueId: v.id, venueN: v.name, groupId: g.id, groupN: g.timing }));
         const cust = getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id), venueId: v.id, venueN: v.name, groupN: g.timing }));
-        arr.push(...applyOrder([...base, ...cust], 'prp_' + g.id));
+        arr.push(...applyOrder([...base, ...cust], 'prp_' + g.id).filter(p => !isDeleted(p.id)));
     }));
     return arr;
 }
@@ -205,6 +213,8 @@ function deleteSelected() {
     if (!selectedTaskId) return;
     if (!confirm('本当に削除しますか？')) return;
     
+    setDeleted(selectedTaskId);
+    
     if (selectedType === 'task') {
         saveCP(getCP().filter(t => t.id !== selectedTaskId));
         saveCR(getCR().filter(t => t.id !== selectedTaskId));
@@ -213,9 +223,13 @@ function deleteSelected() {
     } else if (selectedType === 'group') {
         saveCG(getCG().filter(g => g.id !== selectedTaskId));
     }
+    // 不要なデータを整理
     localStorage.removeItem(LS_DONE + selectedTaskId);
     localStorage.removeItem(LS_EDIT + selectedTaskId);
-    closeDetail(); renderAll();
+    localStorage.removeItem(LS_CLR + selectedTaskId);
+    
+    closeDetail(); 
+    renderAll();
 }
 
 // ===== セクション表示補助 =====
@@ -370,15 +384,32 @@ function setupDrag(el, id, type, scope, items, orderKey, handle) {
 function createWithSidebar(v, allowEdit = false) {
     const f = getFilter();
     const row = document.createElement('div'); row.className = 'with-sidebar';
+    
     if (f.l1) {
         const side = document.createElement('div'); side.className = 'venue-sidebar';
         side.style.backgroundColor = getColor(v.id, '#f1f5f9');
-        // ※ 編集ボタンは削除し、クリック＝詳細パネルでの編集とする
-        const span = document.createElement('span'); span.textContent = getEdit(v.id).name || v.name;
+        
+        const span = document.createElement('span'); 
+        span.textContent = getEdit(v.id).name || v.name;
         side.appendChild(span);
-        side.onclick = () => openDetail(v, 'venue');
+
+        // L1 並べ替え UI
+        const venues = getAllVenues();
+        const vIdx = venues.findIndex(x => x.id === v.id);
+        const { handle, mb } = makeMoveWidget(venues, v.id, 'vn_all', vIdx);
+        mb.appendChild(handle);
+        side.appendChild(mb);
+        
+        // ドラッグ設定
+        setupDrag(row, v.id, 'venue', 'all', venues, 'vn_all', handle);
+
+        side.onclick = (e) => {
+            if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
+            openDetail(v, 'venue');
+        };
         row.appendChild(side);
     }
+    
     const content = document.createElement('div'); content.className = 'content-area';
     row.appendChild(content);
     return { row, content };
@@ -409,8 +440,15 @@ function renderWBS() {
                 const tName = document.createElement('h3'); tName.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
                 tHeader.appendChild(tName);
                 
-                // 開閉トグルのみ
+                // L2 並べ替え UI
+                const gIdx = groups.findIndex(x => x.id === g.id);
+                const { handle, mb } = makeMoveWidget(groups, g.id, 'grp_' + v.id, gIdx);
+                tHeader.appendChild(mb);
+                tHeader.appendChild(handle);
+                setupDrag(tHeader, g.id, 'group', v.id, groups, 'grp_' + v.id, handle);
+
                 tHeader.onclick = (e) => {
+                    if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
                     if (e.target.tagName === 'H3') {
                         openDetail(g, 'group');
                     } else {
@@ -422,12 +460,42 @@ function renderWBS() {
             content.appendChild(tHeader);
 
             if (f.l3) {
-                const pItems = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
-                const rItems = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
-                [...pItems, ...rItems].forEach(item => {
+                const pBase = g.personnel.map(t => mergeTask(t));
+                const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
+                const pItems = applyOrder([...pBase, ...pCust], 'prs_' + g.id).filter(t => !isDeleted(t.id));
+
+                const rBase = (g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) }));
+                const rCust = getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }));
+                const rItems = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(p => !isDeleted(p.id));
+
+                pItems.forEach((item, idx) => {
                     const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
-                    tRow.onclick = () => openDetail(item, 'task');
+                    
+                    const { handle, mb } = makeMoveWidget(pItems, item.id, 'prs_' + g.id, idx);
+                    tRow.appendChild(mb);
+                    tRow.appendChild(handle);
+                    setupDrag(tRow, item.id, 'task_p', g.id, pItems, 'prs_' + g.id, handle);
+
+                    tRow.onclick = (e) => {
+                        if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
+                        openDetail(item, 'task');
+                    };
+                    tContent.appendChild(tRow);
+                });
+                rItems.forEach((item, idx) => {
+                    const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
+                    tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
+                    
+                    const { handle, mb } = makeMoveWidget(rItems, item.id, 'prp_' + g.id, idx);
+                    tRow.appendChild(mb);
+                    tRow.appendChild(handle);
+                    setupDrag(tRow, item.id, 'task_r', g.id, rItems, 'prp_' + g.id, handle);
+
+                    tRow.onclick = (e) => {
+                        if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
+                        setDone(item.id, !getDone(item.id)); renderAll();
+                    };
                     tContent.appendChild(tRow);
                 });
             }
