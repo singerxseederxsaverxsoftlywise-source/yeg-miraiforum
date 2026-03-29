@@ -586,7 +586,7 @@ function renderWBS() {
 function renderGantt() {
     const wrap = document.getElementById('gantt-view'); wrap.innerHTML = '';
     const f = getFilter();
-    const rangeStart = new Date('2026-03-01'), rangeEnd = new Date('2026-06-30');
+    const today = new Date(); const rangeStart = new Date(today); rangeStart.setDate(today.getDate() - 5); const rangeEnd = new Date(rangeStart); rangeEnd.setMonth(rangeStart.getMonth() + 4);
     const days = []; for(let d=new Date(rangeStart); d<=rangeEnd; d.setDate(d.getDate()+1)) days.push(new Date(d));
     
     // メインコンテナ
