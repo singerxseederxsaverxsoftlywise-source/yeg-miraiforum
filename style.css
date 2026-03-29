@@ -1085,3 +1085,49 @@ textarea.detail-input {
     font-size: 20px;
     margin-top: 10px;
 }
+
+/* Type Color Borders */
+.task-row.type-personnel {
+  border-left: 4px solid #facc15 !important;
+}
+.task-row.type-prep {
+  border-left: 4px solid #4ade80 !important;
+}
+
+/* Group Memo Block */
+.group-memo-block {
+  margin: 4px 16px 8px 48px;
+  padding: 8px 12px;
+  background: #fffcf0;
+  border: 1px dashed #fde68a;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #92400e;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.group-memo-label {
+    display: block;
+    font-weight: 700;
+    font-size: 10px;
+    margin-bottom: 2px;
+    color: #b45309;
+    text-transform: uppercase;
+}
+
+.note-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: background 0.2s;
+    margin-right: -4px;
+}
+.note-icon:hover {
+    background: rgba(0,0,0,0.05);
+}

@@ -198,9 +198,13 @@ function openDetail(task, type = 'task') {
     document.getElementById('d-color').value = getColor(task.id);
     
     const isTask = (type === 'task');
-    ['d-tanto','d-start','d-end','d-status','d-prio','d-memo'].forEach(id => {
+    ['d-tanto','d-start','d-end','d-status','d-prio'].forEach(id => {
         document.getElementById(id).parentElement.style.display = isTask ? '' : 'none';
     });
+    // メモ欄はタスク・グループ両方で表示
+    document.getElementById('d-memo').parentElement.style.display = (type === 'task' || type === 'group') ? '' : 'none';
+    const memoLabel = document.getElementById('d-memo').previousElementSibling;
+    if (memoLabel) memoLabel.textContent = (type === 'group') ? '業務内容 / 動線' : 'メモ';
 }
 function closeDetail() {
     document.getElementById('detail-panel').classList.remove('open');
@@ -240,10 +244,11 @@ function saveDetail() {
         if (idxV >= 0) { cv[idxV].name = newName; saveCV(cv); }
         
     } else if (selectedType === 'group') {
-        saveEdit(selectedTaskId, { timing: newName });
+        const editData = { timing: newName, memo: document.getElementById('d-memo').value };
+        saveEdit(selectedTaskId, editData);
         let cg = getCG();
         let idxG = cg.findIndex(x => x.id === selectedTaskId);
-        if (idxG >= 0) { cg[idxG].timing = newName; saveCG(cg); }
+        if (idxG >= 0) { cg[idxG] = { ...cg[idxG], ...editData }; saveCG(cg); }
     }
     closeDetail();
     renderAll();
@@ -483,6 +488,13 @@ function renderWBS() {
                 const tName = document.createElement('h3'); tName.textContent = '⏱ ' + (getEdit(g.id).timing || g.timing);
                 tHeader.appendChild(tName);
                 
+                // メモアイコン
+                const noteIcon = document.createElement('span');
+                noteIcon.className = 'note-icon'; noteIcon.innerHTML = '📓';
+                noteIcon.title = '業務内容を表示・編集';
+                noteIcon.onclick = (e) => { e.stopPropagation(); openDetail(g, 'group'); };
+                tHeader.appendChild(noteIcon);
+
                 // L2 並べ替え UI
                 const gIdx = groups.findIndex(x => x.id === g.id);
                 const { handle, mb } = makeMoveWidget(groups, g.id, 'grp_' + v.id, gIdx);
@@ -502,6 +514,15 @@ function renderWBS() {
             }
             content.appendChild(tHeader);
 
+            // グループメモ表示
+            const gMemo = getEdit(g.id).memo || g.memo;
+            if (gMemo && f.l2) {
+                const memoBlock = document.createElement('div');
+                memoBlock.className = 'group-memo-block';
+                memoBlock.innerHTML = `<span class="group-memo-label">業務内容 / 動線</span>${gMemo.replace(/\n/g, '<br>')}`;
+                content.appendChild(memoBlock);
+            }
+
             if (f.l3) {
                 const pBase = g.personnel.map(t => mergeTask(t));
                 const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
@@ -512,7 +533,7 @@ function renderWBS() {
                 const rItems = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(p => !isDeleted(p.id));
 
                 pItems.forEach((item, idx) => {
-                    const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
+                    const tRow = document.createElement('div'); tRow.className = `task-row type-personnel${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     
                     // 担当者・優先度バッジを追加
@@ -534,7 +555,7 @@ function renderWBS() {
                     tContent.appendChild(tRow);
                 });
                 rItems.forEach((item, idx) => {
-                    const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
+                    const tRow = document.createElement('div'); tRow.className = `task-row type-prep${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     
                     const { handle, mb } = makeMoveWidget(rItems, item.id, 'prp_' + g.id, idx);
