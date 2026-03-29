@@ -63,6 +63,18 @@ function saveCR(a) { localStorage.setItem(LS_CR, JSON.stringify(a)); }
 function getDeleted() { try { return JSON.parse(localStorage.getItem(LS_DEL)) || []; } catch { return []; } }
 function setDeleted(id) { const a = getDeleted(); if(!a.includes(id)){ a.push(id); localStorage.setItem(LS_DEL, JSON.stringify(a)); } }
 function isDeleted(id) { return getDeleted().includes(id); }
+function getGroupTasks(g) {
+    const pBase = (g.personnel || []).map(t => mergeTask(t));
+    const rBase = (g.prepItems || []).map(t => mergeTask(t));
+    const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
+    const rCust = getCR().filter(t => t.groupId === g.id).map(t => mergeTask(t));
+    const all = [...pBase, ...rBase, ...pCust, ...rCust];
+    return all.map(t => {
+        if (t.category) return t;
+        const isP = (g.personnel||[]).some(x=>x.id===t.id) || getCP().some(x=>x.id===t.id);
+        return { ...t, category: isP ? 'personnel' : 'prep' };
+    });
+}
 
 function getAllVenues() { 
     return [...TASKS.venues, ...getCV()].filter(v => !isDeleted(v.id)); 
@@ -560,13 +572,9 @@ function renderWBS() {
             }
 
             if (f.l3) {
-                const pBase = g.personnel.map(t => mergeTask(t));
-                const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
-                const pItems = applyOrder([...pBase, ...pCust], 'prs_' + g.id).filter(t => !isDeleted(t.id));
-
-                const rBase = (g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) }));
-                const rCust = getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }));
-                const rItems = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(p => !isDeleted(p.id));
+                const allTasks = getGroupTasks(g);
+                const pItems = applyOrder(allTasks.filter(t => t.category === 'personnel'), 'prs_' + g.id).filter(t => !isDeleted(t.id));
+                const rItems = applyOrder(allTasks.filter(t => t.category === 'prep'), 'prp_' + g.id).filter(t => !isDeleted(t.id));
 
                 const taskClickHandler = (e, item) => {
                     if (e.target.closest('.move-btns') || e.target.closest('.drag-handle')) return;
@@ -752,10 +760,8 @@ function renderPersonnelList() {
                 content.appendChild(h);
             }
             if (f.l3) {
-                // 人員リスト: personnel配列 + CP配列
-                const pBase = g.personnel.map(t => mergeTask(t));
-                const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
-                const items = applyOrder([...pBase, ...pCust], 'prs_' + g.id).filter(t => !isDeleted(t.id));
+                const allTasks = getGroupTasks(g);
+                const items = applyOrder(allTasks.filter(t => t.category === 'personnel'), 'prs_' + g.id).filter(t => !isDeleted(t.id));
                 
                 items.forEach(t => {
                     const r = document.createElement('div');
@@ -795,9 +801,8 @@ function renderPrepList() {
                 content.appendChild(h);
             }
             if (f.l3) {
-                const rBase = (g.prepItems || []).map(t => mergeTask(t));
-                const rCust = getCR().filter(t => t.groupId === g.id).map(t => mergeTask(t));
-                const items = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(t => !isDeleted(t.id));
+                const allTasks = getGroupTasks(g);
+                const items = applyOrder(allTasks.filter(t => t.category === 'prep'), 'prp_' + g.id).filter(t => !isDeleted(t.id));
 
                 items.forEach(p => {
                     const r = document.createElement('div');
