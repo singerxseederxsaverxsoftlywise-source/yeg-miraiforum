@@ -122,20 +122,7 @@
 
   <script src="tasks.js"></script>
   <script src="app.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const p = TASKS.project;
-      document.getElementById('proj-name').textContent = p.name;
-      document.getElementById('proj-sub').textContent = p.date + '  |  ' + p.venue;
-      document.title = 'WBS | ' + p.name;
-      // 詳細パネルにタスク名も表示
-      const origOpen = openDetail;
-      window.openDetail = function (task) {
-        origOpen(task);
-        document.getElementById('d-title2').textContent = task.text;
-      };
-    });
-  </script>
+
 </body>
 
 </html>

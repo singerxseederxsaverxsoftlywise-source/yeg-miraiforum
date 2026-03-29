@@ -12,6 +12,7 @@ const LS_CP = 'wbs_custom_personnel', LS_CR = 'wbs_custom_prep';
 const LS_CG = 'wbs_custom_groups', LS_CV = 'wbs_custom_venues';
 const LS_CLR = 'wbs_colors_';
 const LS_DEL = 'wbs_deleted_ids';
+const LS_PROJ = 'wbs_project_meta';
 
 // ===== 基本CRUD & ユーティリティ =====
 function getDone(id) { return localStorage.getItem(LS_DONE + id) === 'true'; }
@@ -22,6 +23,22 @@ function getColor(id, def = '#3b82f6') { return localStorage.getItem(LS_CLR + id
 function saveColor(id, c) { localStorage.setItem(LS_CLR + id, c); }
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 function mergeTask(t) { return { ...t, ...getEdit(t.id), done: getDone(t.id) }; }
+
+// プロジェクト情報
+function getProj() { try { return JSON.parse(localStorage.getItem(LS_PROJ)) || TASKS.project; } catch { return TASKS.project; } }
+function saveProj(p) { localStorage.setItem(LS_PROJ, JSON.stringify(p)); }
+
+function editProject() {
+    const p = getProj();
+    const name = prompt('プロジェクト名を変更:', p.name);
+    if (name === null) return;
+    const date = prompt('開催日を変更:', p.date);
+    if (date === null) return;
+    const venue = prompt('基本会場を変更:', p.venue);
+    if (venue === null) return;
+    saveProj({ name, date, venue });
+    location.reload(); // ヘッダー等全体を更新
+}
 
 // 会場・グループ取得
 function getCV() { try { return JSON.parse(localStorage.getItem(LS_CV)) || []; } catch { return []; } }
@@ -192,19 +209,37 @@ function saveDetail() {
     saveColor(selectedTaskId, clr);
 
     if (selectedType === 'task') {
-        saveEdit(selectedTaskId, {
+        const editData = {
             text: newName,
             tanto: document.getElementById('d-tanto').value,
             start: document.getElementById('d-start').value,
             end: document.getElementById('d-end').value,
             priority: document.getElementById('d-prio').value,
             memo: document.getElementById('d-memo').value,
-        });
+        };
+        saveEdit(selectedTaskId, editData);
         setDone(selectedTaskId, document.getElementById('d-status').value === 'done');
+        
+        // カスタム配列表も更新（存在する場合）
+        let cp = getCP();
+        let idx = cp.findIndex(x => x.id === selectedTaskId);
+        if (idx >= 0) { cp[idx] = { ...cp[idx], ...editData }; saveCP(cp); }
+        
+        let cr = getCR();
+        let idxR = cr.findIndex(x => x.id === selectedTaskId);
+        if (idxR >= 0) { cr[idxR].text = newName; saveCR(cr); }
+
     } else if (selectedType === 'venue') {
         saveEdit(selectedTaskId, { name: newName });
+        let cv = getCV();
+        let idxV = cv.findIndex(x => x.id === selectedTaskId);
+        if (idxV >= 0) { cv[idxV].name = newName; saveCV(cv); }
+        
     } else if (selectedType === 'group') {
         saveEdit(selectedTaskId, { timing: newName });
+        let cg = getCG();
+        let idxG = cg.findIndex(x => x.id === selectedTaskId);
+        if (idxG >= 0) { cg[idxG].timing = newName; saveCG(cg); }
     }
     closeDetail();
     renderAll();
@@ -472,13 +507,20 @@ function renderWBS() {
                     const tRow = document.createElement('div'); tRow.className = `task-row${item.done ? ' done' : ''}`;
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     
+                    // 担当者・優先度バッジを追加
+                    const badgeContainer = document.createElement('div');
+                    badgeContainer.style.display = 'flex'; badgeContainer.style.gap = '4px'; badgeContainer.style.marginRight = '8px';
+                    badgeContainer.appendChild(tantoBadge(item.tanto));
+                    badgeContainer.appendChild(prioBadge(item.priority));
+                    tRow.appendChild(badgeContainer);
+
                     const { handle, mb } = makeMoveWidget(pItems, item.id, 'prs_' + g.id, idx);
                     tRow.appendChild(mb);
                     tRow.appendChild(handle);
                     setupDrag(tRow, item.id, 'task_p', g.id, pItems, 'prs_' + g.id, handle);
 
                     tRow.onclick = (e) => {
-                        if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
+                        if (e.target.closest('.move-btns') || e.target.closest('.drag-handle') || e.target.classList.contains('task-check')) return;
                         openDetail(item, 'task');
                     };
                     tContent.appendChild(tRow);
@@ -493,14 +535,50 @@ function renderWBS() {
                     setupDrag(tRow, item.id, 'task_r', g.id, rItems, 'prp_' + g.id, handle);
 
                     tRow.onclick = (e) => {
-                        if (e.target.closest('.move-btns') || e.target.classList.contains('drag-handle')) return;
-                        setDone(item.id, !getDone(item.id)); renderAll();
+                        if (e.target.closest('.move-btns') || e.target.closest('.drag-handle')) return;
+                        if (e.target.classList.contains('task-check')) {
+                            setDone(item.id, !getDone(item.id)); 
+                            renderAll();
+                        } else {
+                            openDetail(item, 'task'); // 準備物も「タスク」扱いで編集可能にする
+                        }
                     };
                     tContent.appendChild(tRow);
                 });
+
+                // + タスク追加ボタン
+                const addT = document.createElement('div');
+                addT.style.padding = '4px 16px 4px 48px';
+                const addTBtn = document.createElement('button');
+                addTBtn.className = 'add-btn';
+                addTBtn.innerHTML = '👤 ＋ タスク追加';
+                addTBtn.onclick = () => showAddForm(tContent, g.id, 'personnel');
+                addT.appendChild(addTBtn);
+                tContent.appendChild(addT);
+
+                // + 準備物追加ボタン
+                const addP = document.createElement('div');
+                addP.style.padding = '4px 16px 8px 48px';
+                const addPBtn = document.createElement('button');
+                addPBtn.className = 'add-btn';
+                addPBtn.innerHTML = '📦 ＋ 準備物追加';
+                addPBtn.onclick = () => showAddForm(tContent, g.id, 'prep');
+                addP.appendChild(addPBtn);
+                tContent.appendChild(addP);
             }
             content.appendChild(tContent);
         });
+
+        // + タイムテーブル追加ボタン
+        const addGWrap = document.createElement('div');
+        addGWrap.style.padding = '10px 16px';
+        const addGBtn = document.createElement('button');
+        addGBtn.className = 'add-btn';
+        addGBtn.innerHTML = '⏱ ＋ タイムテーブル追加';
+        addGBtn.onclick = () => showAddGroupForm(content, v.id);
+        addGWrap.appendChild(addGBtn);
+        content.appendChild(addGWrap);
+
         wrap.appendChild(row);
     });
 }
@@ -673,5 +751,23 @@ document.addEventListener('DOMContentLoaded', () => {
     ['filter-l1','filter-l2','filter-l3'].forEach(id => {
         document.getElementById(id).addEventListener('change', renderAll);
     });
+    
+    // プロジェクトヘッダー初期化
+    const p = getProj();
+    const pn = document.getElementById('proj-name');
+    const ps = document.getElementById('proj-sub');
+    if (pn) {
+        pn.textContent = p.name;
+        pn.style.cursor = 'pointer';
+        pn.title = 'クリックしてプロジェクト編集';
+        pn.addEventListener('click', editProject);
+    }
+    if (ps) {
+        ps.textContent = p.date + '  |  ' + p.venue;
+        ps.style.cursor = 'pointer';
+        ps.addEventListener('click', editProject);
+    }
+    document.title = 'WBS | ' + p.name;
+
     renderAll();
 });
