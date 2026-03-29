@@ -23,6 +23,7 @@ function getColor(id, def = '#3b82f6') { return localStorage.getItem(LS_CLR + id
 function saveColor(id, c) { localStorage.setItem(LS_CLR + id, c); }
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 function mergeTask(t) { return { ...t, ...getEdit(t.id), done: getDone(t.id) }; }
+function toDateStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
 // プロジェクト情報
 function getProj() { try { return JSON.parse(localStorage.getItem(LS_PROJ)) || TASKS.project; } catch { return TASKS.project; } }
@@ -301,12 +302,15 @@ function renderSectionBlock(wrap, title, tasks, isPersonnel) {
 function showAddForm(container, groupId, type) {
     const ex = container.querySelector('.add-form'); if (ex) { ex.remove(); return; }
     const form = document.createElement('div'); form.className = 'add-form';
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toDateStr(new Date());
     if (type === 'personnel') {
         form.innerHTML = `
       <input name="text"  placeholder="タスク名 *" required>
       <input name="tanto" placeholder="担当者">
-      <input name="end" type="date" value="${today}" style="width:130px">
+      <div style="display:flex;gap:4px;align-items:center;">
+        <span style="font-size:10px;color:var(--text2)">開始:</span><input name="start" type="date" value="${today}" style="width:125px">
+        <span style="font-size:10px;color:var(--text2)">締切:</span><input name="end" type="date" value="${today}" style="width:125px">
+      </div>
       <select name="priority">
         <option value="high">🔴 高</option>
         <option value="mid" selected>🟡 中</option>
@@ -321,7 +325,8 @@ function showAddForm(container, groupId, type) {
             const arr = getCP();
             arr.push({
                 id: genId(), groupId, text, tanto: form.querySelector('[name="tanto"]').value.trim(),
-                start: today, end: form.querySelector('[name="end"]').value || today,
+                start: form.querySelector('[name="start"]').value || today,
+                end: form.querySelector('[name="end"]').value || today,
                 priority: form.querySelector('[name="priority"]').value, done: false, memo: ''
             });
             saveCP(arr); renderAll();
@@ -631,21 +636,23 @@ function renderGantt() {
             if (f.l2) content.appendChild(gRow);
 
             if (f.l3) {
-                const tasks = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
+                const tasks = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id).filter(t => !isDeleted(t.id));
                 tasks.forEach(t => {
                     const tRow = document.createElement('div'); tRow.className = 'gantt-row';
                     const tLbl = document.createElement('div'); tLbl.className = 'gantt-task-name'; tLbl.textContent = t.text;
+                    tLbl.onclick = () => openDetail(t, 'task');
                     tRow.appendChild(tLbl);
                     
                     const cells = document.createElement('div'); cells.className = 'gantt-cells';
                     days.forEach(d => {
                         const c = document.createElement('div'); c.className = 'gantt-cell' + (d.getDay()===0?' sun':d.getDay()===6?' sat':'');
+                        if (toDateStr(d) === toDateStr(new Date())) c.style.backgroundColor = 'rgba(255, 230, 0, 0.1)';
                         cells.appendChild(c);
                     });
                     
                     if (t.start && t.end) {
-                        const sIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.start);
-                        const eIdx = days.findIndex(d => d.toISOString().slice(0,10) === t.end);
+                        const sIdx = days.findIndex(d => toDateStr(d) === t.start);
+                        const eIdx = days.findIndex(d => toDateStr(d) === t.end);
                         if (sIdx >= 0) {
                             const bar = document.createElement('div'); bar.className = 'gantt-bar' + (t.done?' done':'');
                             bar.style.left = (sIdx * 31) + 'px';
