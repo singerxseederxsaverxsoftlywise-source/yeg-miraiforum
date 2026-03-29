@@ -13,6 +13,10 @@ const LS_CG = 'wbs_custom_groups', LS_CV = 'wbs_custom_venues';
 const LS_CLR = 'wbs_colors_';
 const LS_DEL = 'wbs_deleted_ids';
 const LS_PROJ = 'wbs_project_meta';
+const LS_MEMO_OPEN = 'wbs_memo_open_';
+
+function isMemoOpen(id) { return localStorage.getItem(LS_MEMO_OPEN + id) === '1'; }
+function setMemoOpen(id, val) { localStorage.setItem(LS_MEMO_OPEN + id, val ? '1' : '0'); }
 
 // ===== 基本CRUD & ユーティリティ =====
 function getDone(id) { return localStorage.getItem(LS_DONE + id) === 'true'; }
@@ -22,7 +26,10 @@ function saveEdit(id, d) { localStorage.setItem(LS_EDIT + id, JSON.stringify(d))
 function getColor(id, def = '#3b82f6') { return localStorage.getItem(LS_CLR + id) || def; }
 function saveColor(id, c) { localStorage.setItem(LS_CLR + id, c); }
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
-function mergeTask(t) { return { ...t, ...getEdit(t.id), done: getDone(t.id) }; }
+function mergeTask(t) { 
+    const e = getEdit(t.id);
+    return { ...t, ...e, done: getDone(t.id) }; 
+}
 function mergeGroup(g) { return { ...g, ...getEdit(g.id) }; }
 function toDateStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
@@ -201,6 +208,14 @@ function openDetail(task, type = 'task') {
     ['d-tanto','d-start','d-end','d-status','d-prio'].forEach(id => {
         document.getElementById(id).parentElement.style.display = isTask ? '' : 'none';
     });
+    // カテゴリー選択はタスクのみ表示
+    document.getElementById('d-type-field').style.display = isTask ? '' : 'none';
+    if (isTask) {
+        // 保存されたカテゴリーがあればそれを優先、なければ所属リストから判断
+        const cat = task.category || (getCP().some(x => x.id === task.id) || (TASKS.venues.some(v => (v.groups||[]).some(g => (g.personnel||[]).some(p => p.id === task.id)))) ? 'personnel' : 'prep');
+        document.getElementById('d-type').value = cat;
+    }
+
     // メモ欄はタスク・グループ両方で表示
     document.getElementById('d-memo').parentElement.style.display = (type === 'task' || type === 'group') ? '' : 'none';
     const memoLabel = document.getElementById('d-memo').previousElementSibling;
@@ -217,6 +232,7 @@ function saveDetail() {
     saveColor(selectedTaskId, clr);
 
     if (selectedType === 'task') {
+        const newType = document.getElementById('d-type').value;
         const editData = {
             text: newName,
             tanto: document.getElementById('d-tanto').value,
@@ -224,19 +240,33 @@ function saveDetail() {
             end: document.getElementById('d-end').value,
             priority: document.getElementById('d-prio').value,
             memo: document.getElementById('d-memo').value,
+            category: newType,
         };
         saveEdit(selectedTaskId, editData);
         setDone(selectedTaskId, document.getElementById('d-status').value === 'done');
         
-        // カスタム配列表も更新（存在する場合）
         let cp = getCP();
-        let idx = cp.findIndex(x => x.id === selectedTaskId);
-        if (idx >= 0) { cp[idx] = { ...cp[idx], ...editData }; saveCP(cp); }
-        
         let cr = getCR();
-        let idxR = cr.findIndex(x => x.id === selectedTaskId);
-        if (idxR >= 0) { cr[idxR].text = newName; saveCR(cr); }
+        let inP = cp.findIndex(x => x.id === selectedTaskId);
+        let inR = cr.findIndex(x => x.id === selectedTaskId);
 
+        if (newType === 'personnel') {
+            if (inR >= 0) {
+                const item = cr.splice(inR, 1)[0];
+                cp.push({ ...item, ...editData });
+                saveCP(cp); saveCR(cr);
+            } else if (inP >= 0) {
+                cp[inP] = { ...cp[inP], ...editData }; saveCP(cp);
+            }
+        } else {
+            if (inP >= 0) {
+                const item = cp.splice(inP, 1)[0];
+                cr.push({ ...item, ...editData });
+                saveCR(cr); saveCP(cp);
+            } else if (inR >= 0) {
+                cr[inR] = { ...cr[inR], ...editData }; saveCR(cr);
+            }
+        }
     } else if (selectedType === 'venue') {
         saveEdit(selectedTaskId, { name: newName });
         let cv = getCV();
@@ -491,8 +521,13 @@ function renderWBS() {
                 // メモアイコン
                 const noteIcon = document.createElement('span');
                 noteIcon.className = 'note-icon'; noteIcon.innerHTML = '📓';
-                noteIcon.title = '業務内容を表示・編集';
-                noteIcon.onclick = (e) => { e.stopPropagation(); openDetail(g, 'group'); };
+                noteIcon.title = '業務内容を表示・開閉';
+                noteIcon.onclick = (e) => { 
+                    e.stopPropagation(); 
+                    const isOpen = isMemoOpen(g.id);
+                    setMemoOpen(g.id, !isOpen);
+                    renderAll(); 
+                };
                 tHeader.appendChild(noteIcon);
 
                 // L2 並べ替え UI
@@ -516,10 +551,11 @@ function renderWBS() {
 
             // グループメモ表示
             const gMemo = getEdit(g.id).memo || g.memo;
-            if (gMemo && f.l2) {
+            if (gMemo && f.l2 && isMemoOpen(g.id)) {
                 const memoBlock = document.createElement('div');
                 memoBlock.className = 'group-memo-block';
                 memoBlock.innerHTML = `<span class="group-memo-label">業務内容 / 動線</span>${gMemo.replace(/\n/g, '<br>')}`;
+                memoBlock.onclick = () => openDetail(g, 'group'); // メモエリアクリックで編集へ
                 content.appendChild(memoBlock);
             }
 
@@ -532,8 +568,21 @@ function renderWBS() {
                 const rCust = getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }));
                 const rItems = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(p => !isDeleted(p.id));
 
+                const taskClickHandler = (e, item) => {
+                    if (e.target.closest('.move-btns') || e.target.closest('.drag-handle')) return;
+                    if (e.target.classList.contains('task-check')) {
+                        setDone(item.id, !getDone(item.id)); renderAll();
+                    } else {
+                        openDetail(item, 'task');
+                    }
+                };
+
                 pItems.forEach((item, idx) => {
-                    const tRow = document.createElement('div'); tRow.className = `task-row type-personnel${item.done ? ' done' : ''}`;
+                    const tRow = document.createElement('div');
+                    const customClr = localStorage.getItem(LS_CLR + item.id);
+                    tRow.className = `task-row type-personnel${item.done ? ' done' : ''}`;
+                    if (customClr) tRow.style.borderLeftColor = customClr;
+                    
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     
                     // 担当者・優先度バッジを追加
@@ -548,14 +597,15 @@ function renderWBS() {
                     tRow.appendChild(handle);
                     setupDrag(tRow, item.id, 'task_p', g.id, pItems, 'prs_' + g.id, handle);
 
-                    tRow.onclick = (e) => {
-                        if (e.target.closest('.move-btns') || e.target.closest('.drag-handle') || e.target.classList.contains('task-check')) return;
-                        openDetail(item, 'task');
-                    };
+                    tRow.onclick = (e) => taskClickHandler(e, item);
                     tContent.appendChild(tRow);
                 });
                 rItems.forEach((item, idx) => {
-                    const tRow = document.createElement('div'); tRow.className = `task-row type-prep${item.done ? ' done' : ''}`;
+                    const tRow = document.createElement('div');
+                    const customClr = localStorage.getItem(LS_CLR + item.id);
+                    tRow.className = `task-row type-prep${item.done ? ' done' : ''}`;
+                    if (customClr) tRow.style.borderLeftColor = customClr;
+                    
                     tRow.innerHTML = `<div class="task-check${item.done ? ' checked' : ''}"></div><span class="task-text">${item.text}</span>`;
                     
                     const { handle, mb } = makeMoveWidget(rItems, item.id, 'prp_' + g.id, idx);
@@ -563,15 +613,7 @@ function renderWBS() {
                     tRow.appendChild(handle);
                     setupDrag(tRow, item.id, 'task_r', g.id, rItems, 'prp_' + g.id, handle);
 
-                    tRow.onclick = (e) => {
-                        if (e.target.closest('.move-btns') || e.target.closest('.drag-handle')) return;
-                        if (e.target.classList.contains('task-check')) {
-                            setDone(item.id, !getDone(item.id)); 
-                            renderAll();
-                        } else {
-                            openDetail(item, 'task'); // 準備物も「タスク」扱いで編集可能にする
-                        }
-                    };
+                    tRow.onclick = (e) => taskClickHandler(e, item);
                     tContent.appendChild(tRow);
                 });
 
@@ -710,12 +752,26 @@ function renderPersonnelList() {
                 content.appendChild(h);
             }
             if (f.l3) {
-                const items = applyOrder([...g.personnel.map(t => mergeTask(t)), ...getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t))], 'prs_' + g.id);
+                // 人員リスト: personnel配列 + CP配列
+                const pBase = g.personnel.map(t => mergeTask(t));
+                const pCust = getCP().filter(t => t.groupId === g.id).map(t => mergeTask(t));
+                const items = applyOrder([...pBase, ...pCust], 'prs_' + g.id).filter(t => !isDeleted(t.id));
+                
                 items.forEach(t => {
-                    const r = document.createElement('div'); r.className = `list-row task-row${t.done ? ' done' : ''}`;
+                    const r = document.createElement('div');
+                    const customClr = localStorage.getItem(LS_CLR + t.id);
+                    r.className = `list-row task-row type-personnel${t.done ? ' done' : ''}`;
+                    if (customClr) r.style.borderLeftColor = customClr;
+
                     r.innerHTML = `<div class="task-check${t.done ? ' checked' : ''}"></div><span class="task-text">${t.text}</span>`;
                     r.appendChild(tantoBadge(t.tanto)); r.appendChild(prioBadge(t.priority));
-                    r.onclick = () => openDetail(t, 'task');
+                    r.onclick = (e) => {
+                        if (e.target.classList.contains('task-check')) {
+                            setDone(t.id, !getDone(t.id)); renderAll();
+                        } else {
+                            openDetail(t, 'task');
+                        }
+                    };
                     content.appendChild(r);
                 });
             }
@@ -739,11 +795,24 @@ function renderPrepList() {
                 content.appendChild(h);
             }
             if (f.l3) {
-                const items = applyOrder([...(g.prepItems || []).map(p => ({ ...p, done: getDone(p.id) })), ...getCR().filter(p => p.groupId === g.id).map(p => ({ ...p, done: getDone(p.id) }))], 'prp_' + g.id);
+                const rBase = (g.prepItems || []).map(t => mergeTask(t));
+                const rCust = getCR().filter(t => t.groupId === g.id).map(t => mergeTask(t));
+                const items = applyOrder([...rBase, ...rCust], 'prp_' + g.id).filter(t => !isDeleted(t.id));
+
                 items.forEach(p => {
-                    const r = document.createElement('div'); r.className = `list-row${p.done ? ' done' : ''}`;
+                    const r = document.createElement('div');
+                    const customClr = localStorage.getItem(LS_CLR + p.id);
+                    r.className = `list-row type-prep${p.done ? ' done' : ''}`;
+                    if (customClr) r.style.borderLeftColor = customClr;
+                    
                     r.innerHTML = `<div class="task-check${p.done ? ' checked' : ''}"></div><span class="task-text">${p.text}</span>`;
-                    r.onclick = () => { setDone(p.id, !getDone(p.id)); renderAll(); };
+                    r.onclick = (e) => {
+                        if (e.target.classList.contains('task-check')) {
+                            setDone(p.id, !getDone(p.id)); renderAll();
+                        } else {
+                            openDetail(p, 'task'); 
+                        }
+                    };
                     content.appendChild(r);
                 });
             }
