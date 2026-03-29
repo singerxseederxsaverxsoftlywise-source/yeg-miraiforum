@@ -23,6 +23,7 @@ function getColor(id, def = '#3b82f6') { return localStorage.getItem(LS_CLR + id
 function saveColor(id, c) { localStorage.setItem(LS_CLR + id, c); }
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 function mergeTask(t) { return { ...t, ...getEdit(t.id), done: getDone(t.id) }; }
+function mergeGroup(g) { return { ...g, ...getEdit(g.id) }; }
 function toDateStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
 // プロジェクト情報
@@ -60,7 +61,9 @@ function getAllVenues() {
     return [...TASKS.venues, ...getCV()].filter(v => !isDeleted(v.id)); 
 }
 function getGroupsForVenue(v) { 
-    return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)].filter(g => !isDeleted(g.id)); 
+    return [...(v.groups || []), ...getCG().filter(g => g.venueId === v.id)]
+        .map(mergeGroup)
+        .filter(g => !isDeleted(g.id)); 
 }
 
 // 階層フィルタ状態
